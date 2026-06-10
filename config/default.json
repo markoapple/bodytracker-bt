@@ -1,0 +1,432 @@
+{
+  "$schema": "bodytracker-config.schema.json",
+  "app": {
+    "log_file": "bodytracker.log",
+    "recording_dir": "recordings"
+  },
+  "camera_a": {
+    "device_index": 0,
+    "fps": 30,
+    "height": 720,
+    "initial_roi": [
+      0,
+      0,
+      1,
+      1
+    ],
+    "initial_roi_enabled": false,
+    "initial_roi_normalized": true,
+    "network_bind_address": "0.0.0.0",
+    "network_max_frame_bytes": 8388608,
+    "network_port": 39555,
+    "network_read_timeout_ms": 1000,
+    "source": "network_mjpeg",
+    "width": 1280
+  },
+  "camera_b": {
+    "device_index": 1,
+    "fps": 60,
+    "height": 720,
+    "initial_roi": [
+      0.0,
+      0.0,
+      1.0,
+      1.0
+    ],
+    "initial_roi_enabled": false,
+    "initial_roi_normalized": true,
+    "network_bind_address": "0.0.0.0",
+    "network_max_frame_bytes": 8388608,
+    "network_port": 39556,
+    "network_read_timeout_ms": 1000,
+    "source": "opencv",
+    "width": 1280
+  },
+  "debug": {
+    "replay_log_path": ""
+  },
+  "hmd": {
+    "mode": "null",
+    "pose_json_path": "hmd_pose.json"
+  },
+  "inference": {
+    "device": "directml"
+  },
+  "osc": {
+    "_comment_min_confidence": "See src/tracking/tracking_constants.h::kVisibleConfidenceThreshold.",
+    "chest_tracker_index": 4,
+    "enabled": false,
+    "left_elbow_tracker_index": 5,
+    "left_foot_tracker_index": 2,
+    "left_knee_tracker_index": 0,
+    "manual_tracker_space_position_offset": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "manual_tracker_space_role_offsets": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "manual_tracker_space_rotation": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "manual_tracker_space_scale": 1.0,
+    "manual_tracker_space_source": "manual",
+    "manual_tracker_space_transform_valid": false,
+    "min_confidence": 0.20000000298023224,
+    "pelvis_tracker_index": 1,
+    "right_elbow_tracker_index": 6,
+    "right_foot_tracker_index": 3,
+    "right_knee_tracker_index": 0,
+    "send_rotations": true,
+    "steamvr_alignment_body_signature": "",
+    "steamvr_alignment_confidence": 0.0,
+    "steamvr_alignment_floor_signature": "",
+    "steamvr_alignment_reason": "",
+    "steamvr_alignment_residual_m": 0.0,
+    "steamvr_alignment_status": "idle",
+    "steamvr_floor_residual_m": 0.0,
+    "steamvr_scale_ratio": 1.0,
+    "steamvr_yaw_offset_rad": 0.0,
+    "target_address": "127.0.0.1",
+    "target_port": 9000,
+    "tracker_space_position_offset": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "tracker_space_role_offsets": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "tracker_space_rotation": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "tracker_space_scale": 1.0,
+    "tracker_space_source": "manual",
+    "tracker_space_transform_valid": false
+  },
+  "tracking": {
+    "_comment_reprojection": "See src/tracking/tracking_constants.h::kReprojectionErrorMaxPx.",
+    "body_calibration": {
+      "_comment_min_overall_confidence": "See src/tracking/tracking_constants.h::kIdentityStableThreshold.",
+      "auto_persist": true,
+      "enabled": false,
+      "max_segment_cv": 0.11999999731779099,
+      "min_overall_confidence": 0.550000011920929,
+      "required_seconds": 2.5
+    },
+    "calibration_path": "calib/default.json",
+    "depth_postprocess_allow_cpu_fallback": false,
+    "depth_postprocess_enabled": false,
+    "depth_postprocess_interval_frames": 4,
+    "depth_postprocess_model_path": "models/rtmw3d-x-cocktail14-384x288.onnx",
+    "enable_replay_recording": false,
+    "latest_frame_skew_tolerance_ms": 18.0,
+    "max_frame_skew_ms": 18.0,
+    "max_mean_reprojection_error_px": 45.0,
+    "min_triangulated_seed_count": 3,
+    "mode": "monocular",
+    "model_path": "models/rtmw-dw-x-l-cocktail14-384x288.onnx",
+    "monocular": {
+      "_comment_bounds": "FOV/depth bounds are documented in src/tracking/tracking_constants.h.",
+      "camera_height_m": 1.2000000476837158,
+      "default_depth_m": 2.200000047683716,
+      "depth_confidence_scale": 0.550000011920929,
+      "floor_camera_orientation_confidence": 0.0,
+      "floor_camera_orientation_enabled": false,
+      "floor_camera_pitch_rad": 0.0,
+      "floor_camera_roll_rad": 0.0,
+      "floor_depth_confidence": 0.6499999761581421,
+      "floor_depth_line_spacing_m": 0.0,
+      "floor_depth_line_spacing_px": 0.0,
+      "floor_depth_reference_m": 0.0,
+      "floor_depth_reference_y_px": 0.0,
+      "floor_distortion_confidence": 0.0,
+      "floor_distortion_correction_enabled": false,
+      "floor_from_image": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "floor_geometry_calibration_enabled": false,
+      "floor_geometry_confidence": 0.0,
+      "floor_geometry_type": "unknown",
+      "floor_projective_confidence": 0.0,
+      "floor_projective_homography_enabled": false,
+      "floor_radial_k1": 0.0,
+      "floor_radial_k2": 0.0,
+      "floor_scale_assist_enabled": false,
+      "floor_second_axis_spacing_m": 0.0,
+      "floor_tangential_p1": 0.0,
+      "floor_tangential_p2": 0.0,
+      "horizontal_fov_deg": 70.0,
+      "image_from_floor": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "image_height": 720,
+      "image_width": 1280,
+      "min_keypoint_confidence": 0.05000000074505806,
+      "min_seed_count": 4,
+      "user_height_m": 1.7000000476837158
+    },
+    "motion_consistency": {
+      "confirm_frames": 2,
+      "confirm_frames_max": 6,
+      "confirm_scale_m": 0.04,
+      "contact_root_correction_gain": 0.20000000298023224,
+      "contact_root_max_correction_m": 0.014999999664723873,
+      "contact_root_max_disagreement_m": 0.012000000104308128,
+      "contact_root_max_residual_m": 0.03500000014901161,
+      "contact_root_min_alignment": 0.75,
+      "contact_root_min_support_confidence": 0.75,
+      "enabled": true,
+      "foot_max_accel_mps2": 60.0,
+      "foot_max_speed_mps": 7.0,
+      "max_direction_deviation_deg": 45.0,
+      "max_lateral_deviation_ratio": 0.6499999761581421,
+      "max_speed_change_ratio": 2.5,
+      "min_motion_m": 0.014999999664723873,
+      "one_euro_beta": 0.017999999225139618,
+      "one_euro_d_cutoff_hz": 1.0,
+      "one_euro_enabled": true,
+      "one_euro_min_cutoff_hz": 1.2000000476837158,
+      "planted_foot_max_drift_m": 0.05000000074505806,
+      "planted_foot_release_confirm_frames": 2,
+      "reject_confidence_decay_per_second": 1.2000000476837158,
+      "root_max_accel_mps2": 22.0,
+      "root_max_speed_mps": 3.5,
+      "stationary_deadzone_m": 0.006000000052154064
+    },
+    "solver_observation_weighting": {
+      "fallback_stddev_m": 1.0,
+      "max_temporal_process_stddev_m": 1.0,
+      "max_weight_scale": 10.0,
+      "min_stddev_for_weight_m": 0.015,
+      "reference_stddev_m": 0.05,
+      "temporal_process_variance_m2_per_s": 0.1225
+    },
+    "stale_frame_timeout_ms": 250.0,
+    "stereo_epipolar": {
+      "enabled": true,
+      "hard_mismatch_rejects_degraded_pair": false,
+      "hard_mismatch_rejects_fresh_pair": true,
+      "hard_threshold_px": 18.0,
+      "min_confidence_floor": 0.1,
+      "soft_threshold_px": 2.5
+    },
+    "stereo_identity": {
+      "hard_threshold_px": 18.0,
+      "identity_mahalanobis_score_scale": 25.0,
+      "identity_max_mahalanobis_sq": 25.0,
+      "identity_prior_depth_stddev_m": 2.5,
+      "identity_prior_lateral_stddev_m": 0.35,
+      "identity_swap_nll_margin": 9.0,
+      "min_assignment_score": 0.45,
+      "min_detection_support": 0.15,
+      "min_scored_lateral_pairs": 2,
+      "partial_coverage_swap_margin": 0.1,
+      "soft_threshold_px": 2.5,
+      "strong_consistency_guard": 0.55,
+      "swap_absolute_margin": 0.18,
+      "swap_ratio_margin": 1.35,
+      "uncertainty_swap_margin_scale": 0.2
+    },
+    "stereo_monocular_fallback_enabled": true,
+    "stereo_triangulation": {
+      "max_dlt_condition_number": 1000.0,
+      "max_ray_closest_distance_m": 0.18,
+      "min_dlt_strength_ratio": 0.001,
+      "min_ray_angle_deg": 0.2,
+      "min_single_camera_quality": 0.06,
+      "min_stereo_reprojection_confidence": 0.055,
+      "single_camera_depth_confidence_scale": 0.58
+    },
+    "stereo_uncertainty": {
+      "max_conditioning_scale": 10.0,
+      "max_reported_position_stddev_m": 100.0,
+      "min_depth_stddev_m": 0.005,
+      "min_image_noise_sigma_px": 0.35,
+      "min_lateral_stddev_m": 0.002
+    },
+    "temporal_update": {
+      "foot_free_gain": 0.55,
+      "foot_supported_gain": 0.12,
+      "free_gain": 0.75,
+      "supported_gain": 0.2
+    },
+    "tracker_ekf": {
+      "enabled": true,
+      "foot_orientation_gain": 0.35,
+      "mahalanobis_gate_chi2": 16.27,
+      "mahalanobis_gate_enabled": true,
+      "max_measurement_variance_m2": 0.01,
+      "min_measurement_variance_m2": 2.5e-05,
+      "missing_velocity_decay": 0.92,
+      "outlier_variance_scale": 64.0,
+      "process_noise_mps2": 8.0,
+      "support_variance_scale": 0.25
+    },
+    "use_legacy_solver": false,
+    "hmd_depth_scale": {
+      "enabled": false,
+      "min_depth_m": 0.3,
+      "max_depth_m": 8.0,
+      "min_scale": 0.33,
+      "max_scale": 3.0,
+      "max_hold_seconds": 0.25,
+      "outlier_sigma": 4.0,
+      "history_size": 15
+    },
+    "stereo_hmd_anchor": {
+      "enabled": false,
+      "interval_seconds": 5.0,
+      "max_correction_m": 1.25
+    },
+    "anchor_space_mapping": {
+      "enabled": true,
+      "use_hmd": true,
+      "use_controllers": true,
+      "allow_hmd_only_scale_fallback": true,
+      "min_anchors_for_pose_refine": 3,
+      "max_reprojection_error_px": 20.0,
+      "target_reprojection_error_px": 8.0,
+      "min_depth_scale": 0.75,
+      "max_depth_scale": 1.35,
+      "room_map_min_update_depth_scale": 0.75,
+      "room_map_max_update_depth_scale": 1.35,
+      "timestamp_alignment_seconds": 0.05,
+      "log_interval_seconds": 1.0,
+      "hmd_to_head_keypoint_offset_m": [0.0, 0.0, 0.0],
+      "left_controller_to_wrist_offset_m": [0.0, 0.0, 0.0],
+      "right_controller_to_wrist_offset_m": [0.0, 0.0, 0.0]
+    },
+    "room_depth_map": {
+      "enabled": true,
+      "collect_only": true,
+      "resolution_width": 320,
+      "resolution_height": 180,
+      "min_samples_per_cell": 8,
+      "max_cell_variance_m2": 0.01,
+      "min_accepted_frames_before_active": 1000,
+      "body_mask_dilation_px": 24,
+      "update_only_when_anchor_quality_good": true,
+      "save_path": "data/room_depth_map.bin",
+      "load_existing": true,
+      "save_interval_seconds": 30.0
+    },
+    "stereo_anchor_depth_correction": {
+      "enabled": true,
+      "apply_per_frame": true,
+      "min_scale": 0.90,
+      "max_scale": 1.10,
+      "camera_space_depth_only": true
+    }
+  },
+  "steamvr_tracker_bridge": {
+    "enabled": true,
+    "target_address": "127.0.0.1",
+    "target_port": 39560,
+    "min_confidence": 0.2,
+    "send_chest": true,
+    "send_elbows": true,
+    "send_knees": false
+  }
+}

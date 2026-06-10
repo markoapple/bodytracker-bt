@@ -1,0 +1,16 @@
+{
+    "name":  "bodytracker",
+    "version-string":  "0.1.0",
+    "description":  "Native C++20 camera-based VR tracker foundation for RGB cameras, Cocktail14 whole-body pose, HMD anchoring, and VRChat OSC output.",
+    "dependencies":  [
+                         "nlohmann-json",
+                         "onnxruntime",
+                         "openvr",
+                         "webview2",
+                         {
+                             "name":  "opencv4",
+                             "default-features":  true
+                         }
+                     ],
+    "builtin-baseline":  "d68a18f57975d5fc80fc33a24c176bfc0801b344"
+}

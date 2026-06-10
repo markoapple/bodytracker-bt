@@ -1,0 +1,85 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "source-sanity",
+      "displayName": "Dependency-light source sanity checks",
+      "binaryDir": "${sourceDir}/build/source-sanity",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "BODYTRACKER_BUILD_APP": "OFF",
+        "BODYTRACKER_BUILD_FULL_TESTS": "OFF",
+        "BODYTRACKER_REGISTER_PYTHON_TESTS": "OFF",
+        "BODYTRACKER_COPY_DIRECTML_ONNXRUNTIME": "OFF"
+      }
+    },
+    {
+      "name": "windows-vcpkg-release",
+      "displayName": "Windows vcpkg Release",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "BUILD_TESTING": "ON",
+        "BODYTRACKER_BUILD_APP": "ON",
+        "BODYTRACKER_BUILD_FULL_TESTS": "ON",
+        "BODYTRACKER_REGISTER_PYTHON_TESTS": "ON"
+      }
+    },
+    {
+      "name": "windows-vcpkg-debug",
+      "displayName": "Windows vcpkg Debug",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "BUILD_TESTING": "ON",
+        "BODYTRACKER_BUILD_APP": "ON",
+        "BODYTRACKER_BUILD_FULL_TESTS": "ON",
+        "BODYTRACKER_REGISTER_PYTHON_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "source-sanity",
+      "configurePreset": "source-sanity"
+    },
+    {
+      "name": "release",
+      "configurePreset": "windows-vcpkg-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "windows-vcpkg-debug",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "source-sanity",
+      "configurePreset": "source-sanity",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "windows-vcpkg-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "windows-vcpkg-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "budgets": {
+    "step_ms.avg": 10.0,
+    "step_ms.p95": 16.0,
+    "step_ms.max": 24.0,
+    "solver_ms.total_avg": 5.0,
+    "solver_ms.preliminary_avg": 3.0,
+    "solver_ms.final_avg": 3.0,
+    "failed_count": 0,
+    "avg_confidence.min": 0.5,
+    "wall_ms": 250.0
+  }
+}

@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>bodytracker</title>
+  <link rel="stylesheet" href="./styles.css?v=runtime-control-20260609">
+  <script defer src="./app.js?v=runtime-control-20260609"></script>
+</head>
+<body>
+  <main class="surface">
+    <header class="mast">
+      <div class="brand">
+        <div class="micro">BT / STEREO / LOCAL RUNTIME</div>
+        <h1>bodytracker</h1>
+        <p>Full desktop control for stereo or monocular tracking, model, cameras, SteamVR tracker output, legacy OSC, and diagnostics.</p>
+      </div>
+      <div class="mast-meta">
+        <span>runtime</span>
+        <b id="runtimePill">BOOT</b>
+        <span id="bridgePill">BRIDGE: WAITING</span>
+        <span id="configPath"></span>
+      </div>
+    </header>
+
+    <section id="overview" class="overview"></section>
+
+    <section class="grid">
+      <article class="module">
+        <div class="module-head">
+          <div><p class="micro">model</p><h2>RTMPose setup</h2></div>
+          <div class="button-cluster">
+            <button id="openModels" type="button">Open models folder</button>
+            <button id="rescanModel" type="button">Rescan model</button>
+          </div>
+        </div>
+        <div class="field-grid compact-controls">
+          <label class="field"><span>Inference device</span><select id="inferenceDevice"><option value="directml">GPU / DirectML + fallback</option><option value="directml_strict">GPU / DirectML strict</option><option value="cpu">CPU</option></select></label>
+          <button class="primary" id="applyInferenceDevice" type="button">Apply device</button>
+        </div>
+        <div class="status-box" id="modelBox"></div>
+        <p class="hint">Primary tracking model: models/rtmw-dw-x-l-cocktail14-384x288.onnx (SHA-256 bd033156e5104c4f5d2edfe0453e02661e30a2f3da453ec93c8764d561b83054). Live VRChat transfer uses calculated 3D from the solver; optional RTMW3D path models/rtmw3d-x-cocktail14-384x288.onnx is off by default.</p>
+      </article>
+
+      <article class="module">
+        <div class="module-head">
+          <div><p class="micro">runtime</p><h2>Run control</h2></div>
+          <div class="button-cluster">
+            <button class="primary" id="startRuntime" type="button">Start</button>
+            <button class="danger" id="stopRuntime" type="button">Stop</button>
+          </div>
+        </div>
+        <div class="status-box" id="runtimeBox"></div>
+      </article>
+
+      <article class="module span-2 phone-site-module">
+        <div class="module-head">
+          <div><p class="micro">phone</p><h2>Phone camera site</h2></div>
+          <div class="button-cluster">
+            <button class="primary" id="phoneSiteEnable" type="button">Enable site</button>
+            <button id="phoneSiteOpen" type="button">Open site</button>
+            <button class="danger" id="phoneSiteDisable" type="button">Disable site</button>
+          </div>
+        </div>
+        <div class="status-box" id="phoneSiteBox"></div>
+        <p class="state-line" id="phoneSiteUrl">site: disabled</p>
+      </article>
+
+      <article class="module span-2">
+        <div class="module-head">
+          <div><p class="micro">cameras</p><h2>Camera selector</h2></div>
+          <div class="button-cluster">
+            <button id="scanCams" type="button">Rescan cameras</button>
+            <button class="primary" id="saveConfig" type="button">Save config</button>
+          </div>
+        </div>
+        <div class="field-grid">
+          <label class="field"><span>Tracking mode</span><select id="trackingMode"><option value="stereo">stereo</option><option value="monocular">monocular</option></select></label>
+          <label class="field"><span>Camera A</span><select id="cameraA"></select></label>
+          <label class="field"><span>Camera B</span><select id="cameraB"></select></label>
+          <div class="mode-box"><span>Auto mode A</span><b id="modeA">--</b></div>
+          <div class="mode-box"><span>Auto mode B</span><b id="modeB">--</b></div>
+        </div>
+        <p class="state-line" id="cameraStatus"></p>
+        <div class="settings-grid crop-panel">
+          <button class="switch" id="cropToggle" type="button" aria-pressed="false"><span>Camera A crop</span><i><b>ON</b><b>OFF</b></i></button>
+          <label class="field"><span>Crop X</span><input id="cropX" type="number" min="0" max="1" step="0.001"></label>
+          <label class="field"><span>Crop Y</span><input id="cropY" type="number" min="0" max="1" step="0.001"></label>
+          <label class="field"><span>Crop W</span><input id="cropW" type="number" min="0.01" max="1" step="0.001"></label>
+          <label class="field"><span>Crop H</span><input id="cropH" type="number" min="0.01" max="1" step="0.001"></label>
+          <button id="cropDraw" type="button">Draw crop</button>
+          <button id="cropFull" type="button">Full frame</button>
+          <div class="floor-status" id="cropStatus">crop: full frame</div>
+        </div>
+        <div class="table">
+          <div class="table-head"><span>Index</span><span>State</span><span>Preview</span><span>Backend</span><span>Frame</span><span>Assignment</span><span>A</span><span>B</span></div>
+          <div id="cameraRows"></div>
+        </div>
+      </article>
+
+      <article class="module span-2">
+        <div class="module-head">
+          <div><p class="micro">runtime</p><h2>Live telemetry</h2></div>
+        </div>
+        <div class="telemetry" id="telemetry"></div>
+        <p class="hint">Watch foot contact evidence, support phase, stereo foot evidence, and root correction here during bring-up.</p>
+        <div id="solverMetrics"></div>
+        <div id="trackerRoleDetails" class="tracker-role-details"></div>
+      </article>
+
+      <article class="module span-2">
+        <div class="module-head">
+          <div><p class="micro">settings</p><h2>Runtime settings</h2></div>
+          <button id="saveAdvanced" type="button">Save config</button>
+        </div>
+
+        <div class="settings-title">Paths</div>
+        <div class="settings-grid">
+          <label class="field wide"><span>Model path</span><input id="modelPath"></label>
+          <label class="field wide"><span>Calibration path</span><input id="calibrationPath"></label>
+          <label class="field"><span>Log file</span><input id="logFile"></label>
+          <label class="field"><span>Recording dir</span><input id="recordingDir"></label>
+          <label class="field"><span>Replay log</span><input id="replayLogPath"></label>
+          <div class="button-cluster">
+            <button id="openCalib" type="button">Open calib folder</button>
+            <button id="createCalib" type="button">Create template</button>
+            <button id="openBuild" type="button">Open build folder</button>
+            <button id="prepDeploy" type="button">Prepare deploy</button>
+          </div>
+        </div>
+
+        <div class="settings-title">Tracking</div>
+        <div class="settings-grid">
+          <label class="field"><span>Stale timeout ms</span><input id="staleTimeout" type="number" min="1"></label>
+          <label class="field"><span>Pair skew tolerance ms</span><input id="latestSkew" type="number" min="1"></label>
+          <label class="field"><span>Max skew diagnostic ms</span><input id="maxSkew" type="number" min="1"></label>
+          <label class="field"><span>Min stereo seeds</span><input id="minSeeds" type="number" min="1" max="26"></label>
+          <label class="field"><span>Max reproj px</span><input id="maxReproj" type="number" min="1" step="0.1"></label>
+          <button class="switch" id="legacySolverToggle" type="button" aria-pressed="false"><span>Legacy solver</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="replayToggle" type="button" aria-pressed="false"><span>Replay record</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="motionToggle" type="button" aria-pressed="true"><span>Motion filter</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="stereoFallbackToggle" type="button" aria-pressed="false"><span>Stereo mono fallback</span><i><b>ON</b><b>OFF</b></i></button>
+          <label class="field"><span>Root corr gain</span><input id="contactRootGain" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Root corr max m</span><input id="contactRootMaxCorrection" type="number" min="0" step="0.001"></label>
+          <label class="field"><span>Root residual max m</span><input id="contactRootMaxResidual" type="number" min="0" step="0.001"></label>
+          <label class="field"><span>Root min support</span><input id="contactRootMinSupport" type="number" min="0" max="1" step="0.01"></label>
+        </div>
+
+
+        <div class="settings-title">Body calibration</div>
+        <div class="settings-grid">
+          <button class="switch" id="bodyCalToggle" type="button" aria-pressed="false"><span>Body calibration</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="bodyCalAutoPersistToggle" type="button" aria-pressed="true"><span>Auto-save body</span><i><b>ON</b><b>OFF</b></i></button>
+          <label class="field"><span>Required seconds</span><input id="bodyCalRequiredSeconds" type="number" min="0.5" max="15" step="0.1"></label>
+          <label class="field"><span>Min confidence</span><input id="bodyCalMinConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Max segment CV</span><input id="bodyCalMaxCv" type="number" min="0.02" max="0.40" step="0.01"></label>
+          <div class="floor-status" id="bodyCalReadout">body calibration: disabled</div>
+        </div>
+
+        <div class="settings-title">Monocular profile</div>
+        <div class="settings-grid">
+          <label class="field"><span>Image width</span><input id="monocularImageWidth" type="number" min="1"></label>
+          <label class="field"><span>Image height</span><input id="monocularImageHeight" type="number" min="1"></label>
+          <label class="field"><span>Horizontal FOV deg</span><input id="monocularFov" type="number" min="1" max="179" step="0.1"></label>
+          <label class="field"><span>User height m</span><input id="monocularUserHeight" type="number" min="0.5" max="2.5" step="0.01"></label>
+          <label class="field"><span>Camera height m</span><input id="monocularCameraHeight" type="number" min="0.1" max="3.0" step="0.01"></label>
+          <label class="field"><span>Default depth m</span><input id="monocularDefaultDepth" type="number" min="0.2" max="10.0" step="0.01"></label>
+          <label class="field"><span>Depth confidence</span><input id="monocularDepthConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Min keypoint conf</span><input id="monocularMinKeypointConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Min mono seeds</span><input id="monocularMinSeeds" type="number" min="1" max="26"></label>
+        </div>
+
+        <div class="floor-assist-panel">
+          <div class="floor-assist-copy">
+            <div class="settings-title">Monocular geometry assists</div>
+            <p class="hint">Draw a plank when the floor is visible. Add wall samples from known rectangular objects when the floor is weak: one solved sample can feed wall depth or camera angle, and extra samples are alternate candidates rather than required steps.</p>
+            <div class="settings-grid">
+              <label class="field"><span>Setup camera</span><select id="floorCameraSlot"><option value="camera_a">Camera A</option><option value="camera_b">Camera B</option></select></label>
+              <label class="field"><span>Optional real plank width m</span><input id="floorSpacingM" type="number" min="0" step="0.001" placeholder="optional"></label>
+              <label class="field"><span>Optional real plank length m</span><input id="floorPlankLengthM" type="number" min="0" step="0.001" placeholder="optional"></label>
+              <label class="field"><span>Floor confidence</span><input id="floorConfidence" type="number" min="0" max="1" step="0.01"></label>
+              <label class="field"><span>Extracted plank width px</span><input id="floorSpacingPx" type="number" min="0" step="0.1" readonly></label>
+              <label class="field"><span>Reference edge y px</span><input id="floorReferenceY" type="number" min="0" step="0.1" readonly></label>
+              <label class="field"><span>Reference depth m</span><input id="floorReferenceM" type="number" min="0" step="0.001"></label>
+              <button class="switch" id="floorAssistToggle" type="button" aria-pressed="false"><span>Scalar assist</span><i><b>ON</b><b>OFF</b></i></button>
+              <label class="field"><span>Wall sample</span><select id="wallRectSlot"><option value="0">Sample 1</option><option value="1">Sample 2</option><option value="2">Sample 3</option></select></label>
+              <label class="field"><span>Known object width m</span><input id="wallRectWidthM" type="number" min="0" step="0.001" placeholder="optional"></label>
+              <label class="field"><span>Known object height m</span><input id="wallRectHeightM" type="number" min="0" step="0.001" placeholder="optional"></label>
+              <label class="field"><span>Known object aspect</span><input id="wallRectAspect" type="number" min="0" step="0.001" placeholder="auto"></label>
+            </div>
+            <div class="wall-slot-row" id="wallSlotButtons">
+              <button class="wall-slot primary active" id="wallSlot0" type="button" data-wall-slot="0"><b>Sample 1</b><span>start here</span></button>
+              <button class="wall-slot reserve" id="wallSlot1" type="button" data-wall-slot="1"><b>Sample 2</b><span>optional</span></button>
+              <button class="wall-slot reserve" id="wallSlot2" type="button" data-wall-slot="2"><b>Sample 3</b><span>optional</span></button>
+            </div>
+            <div class="floor-mark-actions">
+              <button id="floorManualApply" type="button">Apply drawn plank</button>
+              <button id="refreshPreview" type="button">Refresh preview</button>
+              <button id="floorMarkStart" type="button">Draw one plank</button>
+              <button id="floorWallStart" type="button">Draw wall sample</button>
+              <button id="wallApplySelected" type="button">Solve sample</button>
+              <button id="wallClearSelected" type="button">Clear sample</button>
+              <button id="floorMarkClear" type="button">Clear lines</button>
+              <div class="floor-status" id="floorAssistStatus">floor assist: disabled</div>
+              <div class="floor-status" id="wallRectStatus">wall samples: no sample selected</div>
+            </div>
+            <p class="hint" id="floorMarkReadout">Draw floor plank lines or click Draw wall sample and mark four corners of one rectangular object. Known object size turns a wall sample into a metric depth candidate.</p>
+          </div>
+          <div class="floor-preview-wrap no-preview">
+            <img id="floorAssistPreview" class="floor-preview-img" alt="Camera setup marking preview">
+            <svg id="bodyPoseOverlay" class="body-pose-overlay" aria-hidden="true"></svg>
+            <svg id="floorMarkOverlay" class="floor-mark-overlay" aria-hidden="true"></svg>
+          </div>
+        </div>
+
+        <div class="settings-title">SteamVR tracker output / legacy OSC</div>
+        <div class="settings-grid">
+          <button class="switch" id="steamVrBridgeToggle" type="button" aria-pressed="true"><span>SteamVR trackers</span><i><b>ON</b><b>OFF</b></i></button>
+          <label class="field"><span>SteamVR bridge host</span><input id="steamVrBridgeHost"></label>
+          <label class="field"><span>SteamVR bridge port</span><input id="steamVrBridgePort" type="number" min="1" max="65535"></label>
+          <label class="field"><span>SteamVR min confidence</span><input id="steamVrBridgeMinConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <button class="switch" id="steamVrBridgeChestToggle" type="button" aria-pressed="true"><span>SteamVR chest</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="steamVrBridgeElbowsToggle" type="button" aria-pressed="true"><span>Constrained elbows</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="steamVrBridgeKneesToggle" type="button" aria-pressed="false"><span>Experimental knees</span><i><b>ON</b><b>OFF</b></i></button>
+          <div class="floor-status wide" id="steamVrBridgeStatus">SteamVR trackers: core waist/feet + constrained elbows on; knees off by default</div>
+          <label class="field"><span>Legacy OSC host</span><input id="oscHost"></label>
+          <label class="field"><span>Legacy OSC port</span><input id="oscPort" type="number" min="1" max="65535"></label>
+          <label class="field"><span>Legacy OSC min confidence</span><input id="oscMinConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Pelvis index</span><input id="pelvisTracker" type="number" min="1" max="8"></label>
+          <label class="field"><span>Left foot index</span><input id="leftFootTracker" type="number" min="1" max="8"></label>
+          <label class="field"><span>Right foot index</span><input id="rightFootTracker" type="number" min="1" max="8"></label>
+          <label class="field"><span>Chest index</span><input id="chestTracker" type="number" min="0" max="8"></label>
+          <label class="field"><span>Left elbow index</span><input id="leftElbowTracker" type="number" min="0" max="8"></label>
+          <label class="field"><span>Right elbow index</span><input id="rightElbowTracker" type="number" min="0" max="8"></label>
+          <label class="field"><span>Left knee index (optional)</span><input id="leftKneeTracker" type="number" min="0" max="8"></label>
+          <label class="field"><span>Right knee index (optional)</span><input id="rightKneeTracker" type="number" min="0" max="8"></label>
+          <label class="field"><span>HMD mode</span><select id="hmdMode"><option value="null">null</option><option value="json_file">json_file</option></select></label>
+          <label class="field wide"><span>HMD JSON</span><input id="hmdPath"></label>
+          <button class="switch" id="oscToggle" type="button" aria-pressed="false"><span>Legacy OSC</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="oscRotToggle" type="button" aria-pressed="true"><span>Legacy OSC rotations</span><i><b>ON</b><b>OFF</b></i></button>
+        </div>
+
+        <div class="tracker-space-panel">
+          <div class="settings-title">Guided tracker-space alignment</div>
+          <p class="hint">SteamVR tracker output and legacy OSC both use this camera-to-VR tracker-space transform. Use SteamVR controller alignment or manual values, then save config.</p>
+          <div class="settings-grid">
+            <label class="field"><span>Offset X m</span><input id="trackerOffsetX" type="number" step="0.001"></label>
+            <label class="field"><span>Offset Y m</span><input id="trackerOffsetY" type="number" step="0.001"></label>
+            <label class="field"><span>Offset Z m</span><input id="trackerOffsetZ" type="number" step="0.001"></label>
+            <label class="field"><span>Rotation X</span><input id="trackerRotX" type="number" step="0.0001"></label>
+            <label class="field"><span>Rotation Y</span><input id="trackerRotY" type="number" step="0.0001"></label>
+            <label class="field"><span>Rotation Z</span><input id="trackerRotZ" type="number" step="0.0001"></label>
+            <label class="field"><span>Rotation W</span><input id="trackerRotW" type="number" step="0.0001"></label>
+            <label class="field"><span>Scale</span><input id="trackerScale" type="number" min="0.001" step="0.001"></label>
+            <button class="switch" id="trackerSpaceValidToggle" type="button" aria-pressed="false"><span>Transform valid</span><i><b>YES</b><b>NO</b></i></button>
+          </div>
+          <div class="floor-mark-actions">
+            <button id="trackerSpaceIdentity" type="button">Use identity draft</button>
+            <button id="trackerSpaceValidate" type="button">Validate numbers</button>
+            <div class="floor-status" id="trackerSpaceStatus">tracker space: pending</div>
+          </div>
+          <p class="hint" id="trackerSpaceReadout">Manual/json alignment path: set the transform, validate it, mark it valid, save config, then use SteamVR trackers or legacy OSC.</p>
+
+          <div class="steamvr-align-panel">
+            <div class="settings-title">SteamVR controller alignment</div>
+            <p class="hint">Hold a tracked VR controller against each landmark on your body, then record the sample. The wizard guides you through each point. Stale controller/provider poses are warnings; a finite solved transform remains available unless you clear it or choose a finite manual fallback.</p>
+
+            <div class="wizard-progress" id="steamVrWizProgress">
+              <div class="wiz-step" data-wiz="start"><div class="wiz-num">1</div><span class="wiz-label">Start</span></div>
+              <div class="wiz-step" data-wiz="left_foot"><div class="wiz-num">2</div><span class="wiz-label">L ankle</span></div>
+              <div class="wiz-step" data-wiz="right_foot"><div class="wiz-num">3</div><span class="wiz-label">R ankle</span></div>
+              <div class="wiz-step" data-wiz="pelvis"><div class="wiz-num">4</div><span class="wiz-label">Pelvis</span></div>
+              <div class="wiz-step" data-wiz="floor"><div class="wiz-num">5</div><span class="wiz-label">Floor</span></div>
+              <div class="wiz-step optional" data-wiz="forward"><div class="wiz-num">6</div><span class="wiz-label">Forward</span></div>
+              <div class="wiz-step optional" data-wiz="chest"><div class="wiz-num">7</div><span class="wiz-label">Chest</span></div>
+              <div class="wiz-step optional" data-wiz="left_elbow"><div class="wiz-num">8</div><span class="wiz-label">L elbow</span></div>
+              <div class="wiz-step optional" data-wiz="right_elbow"><div class="wiz-num">9</div><span class="wiz-label">R elbow</span></div>
+              <div class="wiz-step optional" data-wiz="left_knee"><div class="wiz-num">10</div><span class="wiz-label">L knee</span></div>
+              <div class="wiz-step optional" data-wiz="right_knee"><div class="wiz-num">11</div><span class="wiz-label">R knee</span></div>
+              <div class="wiz-step" data-wiz="solve"><div class="wiz-num">12</div><span class="wiz-label">Solve</span></div>
+            </div>
+
+            <div class="calib-prompt" id="steamVrCalibPrompt">
+              <div class="prompt-main" id="steamVrPromptMain">Press "Start calibration" to begin</div>
+              <div class="prompt-detail" id="steamVrPromptDetail">Stand in your play space facing your cameras. Required samples unlock Solve; optional upper-body/knee samples refine offsets.</div>
+            </div>
+
+            <div class="floor-mark-actions">
+              <button class="primary" id="steamVrAlignStart" type="button">Start calibration</button>
+              <button id="steamVrAlignLeftFoot" type="button" title="Use either hand - hold controller against LEFT ankle">Left ankle</button>
+              <button id="steamVrAlignRightFoot" type="button" title="Use either hand - hold controller against RIGHT ankle">Right ankle</button>
+              <button id="steamVrAlignPelvis" type="button" title="Hold controller at your hip/pelvis center">Pelvis</button>
+              <button id="steamVrAlignFloor" type="button" title="Place controller flat on the floor">Floor</button>
+              <button id="steamVrAlignForward" type="button" title="Hold controller at arm's length, pointing toward cameras">Forward</button>
+              <button id="steamVrAlignChest" type="button" title="Hold controller against upper chest/sternum">Chest</button>
+              <button id="steamVrAlignLeftElbow" type="button" title="Hold controller against LEFT elbow">Left elbow</button>
+              <button id="steamVrAlignRightElbow" type="button" title="Hold controller against RIGHT elbow">Right elbow</button>
+              <button id="steamVrAlignLeftKnee" type="button" title="Use right hand - hold controller against LEFT kneecap">Left knee</button>
+              <button id="steamVrAlignRightKnee" type="button" title="Use left hand - hold controller against RIGHT kneecap">Right knee</button>
+              <button class="primary" id="steamVrAlignFinish" type="button">Solve + save</button>
+              <button class="danger" id="steamVrAlignClear" type="button">Clear alignment</button>
+            </div>
+            <div class="floor-status" id="steamVrAlignStatus">SteamVR alignment: idle</div>
+            <div class="mini-metrics" id="steamVrAlignMetrics"></div>
+            <div class="table compact"><div id="steamVrAlignSamples"></div></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <div id="commandStatus" class="command-status">READY</div>
+    <pre id="log" class="footer-log"></pre>
+  </main>
+</body>
+</html>

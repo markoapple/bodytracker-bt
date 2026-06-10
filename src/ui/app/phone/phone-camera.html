@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>bodytracker phone camera</title>
+  <style>
+    html,body{margin:0;height:100%;background:#090b10;color:#edf2ff;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+    body{display:grid;grid-template-rows:1fr auto}
+    video{width:100%;height:100%;object-fit:contain;background:#05060a}
+    .panel{display:grid;gap:10px;padding:12px;background:#111722;border-top:1px solid #283244}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    button,select,input{font:inherit;border:1px solid #34435a;background:#172033;color:#edf2ff;border-radius:6px;padding:10px}
+    button.primary{background:#1f6feb;border-color:#2d7ff9}
+    label{display:grid;gap:4px;font-size:12px;color:#aab7cf}
+    #status{font-size:13px;color:#c9d4ea;line-height:1.35}
+  </style>
+</head>
+<body>
+  <video id="preview" autoplay playsinline muted></video>
+  <div class="panel">
+    <div class="row">
+      <button class="primary" id="start">Start</button>
+      <button id="stop">Stop</button>
+      <button id="flip">Flip camera</button>
+      <button id="apk">Download Android APK</button>
+    </div>
+    <div class="row">
+      <label>Quality <input id="quality" type="number" min="35" max="95" value="72"></label>
+      <label>FPS <input id="fps" type="number" min="5" max="60" value="30"></label>
+      <label>Width <input id="width" type="number" min="320" max="1920" value="960"></label>
+    </div>
+    <div id="status">idle</div>
+  </div>
+  <script>
+    const video = document.getElementById("preview");
+    const statusEl = document.getElementById("status");
+    const qualityEl = document.getElementById("quality");
+    const fpsEl = document.getElementById("fps");
+    const widthEl = document.getElementById("width");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    let ws = null;
+    let stream = null;
+    let timer = null;
+    let facingMode = "environment";
+    let sent = 0;
+    let forwarded = 0;
+    let busy = false;
+    let backendReady = false;
+
+    function status(text) { statusEl.textContent = text; }
+    function stopTimer() {
+      if (timer) clearInterval(timer);
+      timer = null;
+    }
+    function wsUrl() {
+      const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+      return `${scheme}//${location.host}/stream`;
+    }
+    async function openCamera() {
+      if (!window.isSecureContext) {
+        throw new Error("phone camera needs HTTPS; open the https:// URL shown by BodyTracker and accept the certificate warning");
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("camera API is unavailable in this browser; use Chrome/Safari over HTTPS");
+      }
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      const width = Math.max(320, Math.min(1920, Number(widthEl.value) || 960));
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: width }, frameRate: { ideal: Number(fpsEl.value) || 30 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+    }
+    function sendFrame() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || busy || !video.videoWidth) return;
+      busy = true;
+      const width = Math.min(Number(widthEl.value) || 960, video.videoWidth);
+      const scale = width / video.videoWidth;
+      canvas.width = width;
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        busy = false;
+        if (!blob || !ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(blob);
+        sent += 1;
+        if (sent < 5 || sent % 30 === 0) {
+          const tail = forwarded > 0 ? ` Â· bodytracker received=${forwarded}` : (backendReady ? " Â· waiting for first backend frame counter" : " Â· waiting for backend socket");
+          status(`phone sending=${sent} ${canvas.width}x${canvas.height}${tail}`);
+        }
+      }, "image/jpeg", Math.max(35, Math.min(95, Number(qualityEl.value) || 72)) / 100);
+    }
+    async function start() {
+      stop();
+      sent = 0;
+      forwarded = 0;
+      backendReady = false;
+      status("checking phone bridge...");
+      try {
+        const health = await fetch("/healthz", { cache: "no-store" }).then((r) => r.json());
+        if (health?.targetHost && health?.targetPort) {
+          status(`bridge online; backend target ${health.targetHost}:${health.targetPort}`);
+        }
+      } catch {
+        status("bridge health check failed; verify the phone is on the same Wi-Fi and accept the HTTPS certificate");
+      }
+      await openCamera();
+      ws = new WebSocket(wsUrl());
+      ws.binaryType = "arraybuffer";
+      ws.onopen = () => {
+        status("bridge socket connected; waiting for BodyTracker backend...");
+        timer = setInterval(sendFrame, Math.max(16, Math.round(1000 / (Number(fpsEl.value) || 30))));
+      };
+      ws.onmessage = (event) => {
+        const text = typeof event.data === "string" ? event.data : "";
+        if (text === "backend_connected") {
+          backendReady = true;
+          status("BodyTracker backend connected; sending camera frames...");
+        } else if (text.startsWith("frames_forwarded:")) {
+          backendReady = true;
+          forwarded = Number(text.split(":")[1]) || forwarded;
+          status(`streaming OK Â· phone sent=${sent} Â· bodytracker received=${forwarded}`);
+        } else if (text === "bridge_open") {
+          status("bridge open; waiting for backend socket...");
+        }
+      };
+      ws.onclose = (event) => {
+        stopTimer();
+        const reason = event?.reason ? `: ${event.reason}` : "";
+        status(sent > 0 ? `disconnected${reason}` : `disconnected before first frame${reason}`);
+      };
+      ws.onerror = () => status("websocket error; check Windows Firewall, Node, and that BodyTracker runtime is running");
+    }
+    function stop() {
+      stopTimer();
+      if (ws) ws.close(1000, "stop");
+      ws = null;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+      video.srcObject = null;
+      busy = false;
+      backendReady = false;
+      status("stopped");
+    }
+    document.getElementById("start").onclick = () => start().catch((e) => status(e.message || String(e)));
+    document.getElementById("stop").onclick = stop;
+    document.getElementById("apk").onclick = () => { location.href = "/app-debug.apk"; };
+    document.getElementById("flip").onclick = () => {
+      facingMode = facingMode === "environment" ? "user" : "environment";
+      start().catch((e) => status(e.message || String(e)));
+    };
+    window.addEventListener("pagehide", stop);
+  </script>
+</body>
+</html>

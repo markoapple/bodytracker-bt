@@ -1,0 +1,62 @@
+{
+  "audit_findings": [
+    {
+      "finding_id": "phase11_geometry_cache",
+      "claim": "Introduce geometry cache for derived stereo geometry",
+      "classification": "defensive_hardening",
+      "evidence": {
+        "files_inspected": [
+          "src/tracking/epipolar_geometry.h",
+          "src/tracking/epipolar_geometry.cpp",
+          "src/tracking/triangulation.h"
+        ],
+        "code_observation": "Epipolar geometry computation is deterministic and expensive; recomputing on every frame wastes cycles",
+        "test_observation": "geometry_cache_test.cpp verifies hit/miss/invalidation semantics"
+      },
+      "action": "patched",
+      "reason": "Cache avoids redundant computation while preserving semantic separation through content-addressed keys"
+    },
+    {
+      "finding_id": "phase12_adversarial_identity",
+      "claim": "Add adversarial identity arbitration tests",
+      "classification": "defensive_hardening",
+      "evidence": {
+        "files_inspected": [
+          "src/tracking/identity_assignment.cpp",
+          "src/tracking/identity_assignment.h"
+        ],
+        "code_observation": "Identity arbitration uses Mahalanobis/NLL metrics but lacked adversarial test coverage",
+        "test_observation": "identity_adversarial_test.cpp covers 10 adversarial scenarios"
+      },
+      "action": "patched",
+      "reason": "Tests verify correct behavior under adversarial conditions that would break scalar/collapsed implementations"
+    },
+    {
+      "finding_id": "phase13_structure_report",
+      "claim": "Clarify ownership boundaries without changing behavior",
+      "classification": "documentation_only",
+      "evidence": {
+        "files_inspected": [
+          "src/tracking/identity_assignment.cpp",
+          "src/tracking/measurement_weighting.h"
+        ],
+        "code_observation": "IdentityAnisotropicMahalanobisSq was in anonymous namespace, preventing testability",
+        "test_observation": "Moved to public API for Phase 12 test coverage"
+      },
+      "action": "patched",
+      "reason": "Function moved from anonymous namespace to public bt:: namespace for auditability"
+    }
+  ],
+  "semantic_invariants_verified": [
+    "detection_confidence_is_not_geometric_uncertainty",
+    "geometric_uncertainty_is_not_solver_weight",
+    "solver_weight_is_not_output_confidence",
+    "stale_time_process_noise_is_not_detection_confidence",
+    "fallback_missing_uncertainty_is_conservative",
+    "telemetry_exposes_ingredients_not_only_conclusions",
+    "config_preserves_semantic_names",
+    "identity_arbitration_auditable_through_anisotropic_evidence",
+    "cache_hits_never_hide_stale_calibration_config_state",
+    "structural_cleanup_does_not_change_behavior_unless_confirmed_bug"
+  ]
+}

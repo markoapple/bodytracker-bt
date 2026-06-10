@@ -1,0 +1,122 @@
+{
+  "ownership": [
+    {
+      "concept": "epipolar_geometry",
+      "owning_module": "src/tracking/epipolar_geometry.h/.cpp",
+      "non_owners": ["src/tracking/identity_assignment.cpp", "src/tracking/tracking_pipeline.cpp"],
+      "forbidden_interpretations": ["detection_confidence", "solver_weight", "geometric_uncertainty"]
+    },
+    {
+      "concept": "triangulation",
+      "owning_module": "src/tracking/triangulation.h/.cpp",
+      "non_owners": ["src/tracking/identity_assignment.cpp", "src/tracking/body_solver.cpp"],
+      "forbidden_interpretations": ["confidence", "solver_weight"]
+    },
+    {
+      "concept": "measurement_uncertainty",
+      "owning_module": "src/tracking/triangulation.h/.cpp",
+      "non_owners": ["src/tracking/measurement_weighting.h", "src/tracking/body_solver.cpp"],
+      "forbidden_interpretations": ["confidence", "solver_weight", "detection_confidence"]
+    },
+    {
+      "concept": "measurement_weighting",
+      "owning_module": "src/tracking/measurement_weighting.h",
+      "non_owners": ["src/tracking/body_solver.cpp", "src/tracking/tracking_pipeline.cpp"],
+      "forbidden_interpretations": ["confidence", "output_confidence"]
+    },
+    {
+      "concept": "geometry_cache",
+      "owning_module": "src/tracking/geometry_cache.h/.cpp",
+      "non_owners": ["src/tracking/tracking_pipeline.cpp"],
+      "forbidden_interpretations": ["stale_geometry", "uncached_computation"]
+    },
+    {
+      "concept": "identity_arbitration",
+      "owning_module": "src/tracking/identity_assignment.h/.cpp",
+      "non_owners": ["src/tracking/body_solver.cpp"],
+      "forbidden_interpretations": ["confidence", "uncertainty", "solver_weight"]
+    },
+    {
+      "concept": "solver_observation_construction",
+      "owning_module": "src/tracking/body_solver.cpp",
+      "non_owners": [],
+      "forbidden_interpretations": ["detection_confidence", "geometric_uncertainty"]
+    },
+    {
+      "concept": "telemetry_serialization",
+      "owning_module": "src/debug/replay_log.cpp",
+      "non_owners": [],
+      "forbidden_interpretations": ["confidence_from_geometry", "weight_as_confidence"]
+    }
+  ],
+  "moved_helpers": [
+    {
+      "symbol": "MakeGeometryCacheKey",
+      "from": "N/A (new in Phase 11)",
+      "to": "src/tracking/geometry_cache.h",
+      "behavior_changed": false
+    },
+    {
+      "symbol": "GetOrComputeEpipolarGeometry",
+      "from": "N/A (new in Phase 11)",
+      "to": "src/tracking/geometry_cache.h",
+      "behavior_changed": false
+    }
+  ],
+  "semantic_invariants": [
+    {
+      "invariant": "confidence_is_not_uncertainty",
+      "enforced_by_tests": ["identity_adversarial_test.cpp", "measurement_weighting_test.cpp"]
+    },
+    {
+      "invariant": "uncertainty_is_not_solver_weight",
+      "enforced_by_tests": ["measurement_weighting_test.cpp", "identity_adversarial_test.cpp"]
+    },
+    {
+      "invariant": "solver_weight_is_not_output_confidence",
+      "enforced_by_tests": ["measurement_weighting_test.cpp", "reliability_confidence_test.cpp"]
+    },
+    {
+      "invariant": "cache_hits_must_not_hide_stale_state",
+      "enforced_by_tests": ["geometry_cache_test.cpp"]
+    },
+    {
+      "invariant": "fallback_uncertainty_is_conservative",
+      "enforced_by_tests": ["identity_adversarial_test.cpp", "measurement_weighting_test.cpp"]
+    },
+    {
+      "invariant": "no_scalar_collapse_of_anisotropy",
+      "enforced_by_tests": ["identity_adversarial_test.cpp"]
+    },
+    {
+      "invariant": "legacy_bypass_prevention",
+      "enforced_by_tests": ["identity_adversarial_test.cpp"]
+    }
+  ],
+  "known_approximations": [
+    {
+      "name": "isotropic_focal_heuristic",
+      "scope": "epipolar geometry pixel-space fallback",
+      "risk": "low",
+      "not_a_bug_because": "This is explicitly named as a heuristic and only used when the rigorous anisotropic path is unavailable. The anisotropic path is preferred when both cameras have valid distortion models."
+    },
+    {
+      "name": "cauchy_scoring_for_identity",
+      "scope": "identity arbitration Mahalanobis-to-score conversion",
+      "risk": "low",
+      "not_a_bug_because": "The Cauchy-style scoring is a policy choice for converting Mahalanobis distance to a 0-1 score. The hard Mahalanobis gate ensures decisions are not made on score alone."
+    },
+    {
+      "name": "diagonal_covariance_approximation",
+      "scope": "identity NLL computation",
+      "risk": "medium",
+      "not_a_bug_because": "Full covariance computation is deferred. The diagonal approximation with anisotropic lateral/depth variance captures the dominant directional uncertainty without cross-term complexity. Tests verify that lateral vs depth displacements produce different Mahalanobis values."
+    },
+    {
+      "name": "single_entry_cache",
+      "scope": "geometry cache implementation",
+      "risk": "low",
+      "not_a_bug_because": "The cache stores only the most recent geometry computation. This is sufficient because the calibration and config are stable during a solve frame. Multi-entry caching is deferred until profiling shows it's needed."
+    }
+  ]
+}
