@@ -118,6 +118,46 @@ const webviewBridge = {
   addMessageListener(handler) { window.chrome?.webview?.addEventListener?.("message", handler); }
 };
 
+const commandLabels = {
+  scanCameras: "Scan cameras",
+  enablePhoneWebCamera: "Enable phone site",
+  openPhoneWebCamera: "Open phone site",
+  disablePhoneWebCamera: "Disable phone site",
+  openModelsFolder: "Open models folder",
+  openCalibrationFolder: "Open calib folder",
+  createCalibrationTemplate: "Create calib template",
+  openBuildFolder: "Open build folder",
+  prepareDeployFolder: "Prepare deploy",
+  rescanModel: "Rescan model",
+  saveConfig: "Save config",
+  startRuntime: "Start runtime",
+  stopRuntime: "Stop runtime",
+  setCamera: "Set camera",
+  refreshCameraPreview: "Refresh preview",
+  calibrateFloorGeometryBackend: "Solve floor geometry",
+  steamVrAlignmentStart: "Start SteamVR alignment",
+  steamVrAlignmentRecord: "Record SteamVR sample",
+  steamVrAlignmentFinish: "Solve SteamVR alignment",
+  steamVrAlignmentClear: "Clear SteamVR alignment"
+};
+
+function titleCaseCommand(command) {
+  return String(command || "command")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function commandLabel(command) {
+  return commandLabels[command] || titleCaseCommand(command);
+}
+
+function commandProgressText(command) {
+  return `${commandLabel(command)}...`;
+}
+
 class CommandBus {
   constructor(options = {}) {
     this.bridge = options.bridge;
@@ -165,7 +205,7 @@ class CommandBus {
       silentReply: !!options.silentReply, button: options.button || null
     };
 
-    this.onStatus(`Sending ${command}`);
+    this.onStatus(commandProgressText(command));
     return new Promise((resolve, reject) => {
       this.pending.set(envelope.id, { command, resolve, reject, envelope, timeout: null });
       this.notifyPending();
@@ -212,7 +252,7 @@ class CommandBus {
       this.circuitBreaker.nextAttempt = this.now() + this.circuitBreaker.timeoutMs;
     }
     this.onBridge(errorText.includes("timeout") ? "TIMEOUT" : "ERROR", false);
-    this.onStatus(`${entry.command}: ${errorText}`, false);
+    this.onStatus(`${commandLabel(entry.command)}: ${errorText}`, false);
     entry.resolve({ ok: false, error: errorText });
     this.notifyPending();
   }
@@ -440,10 +480,13 @@ function flashNode(node, className) {
 
 function setButtonBusy(button, label = "Working") {
   if (!button) return;
+  label = commandLabel(label);
   window.clearTimeout(transientTimers.get(button));
   button.dataset.busy = "true";
   button.dataset.feedback = "busy";
-  button.textContent = `${baseButtonLabel(button)} …`;
+  button.dataset.state = "pending";
+  button.dataset.statusText = label;
+  button.textContent = baseButtonLabel(button);
   button.setAttribute("aria-busy", "true");
   button.title = `${label} pending`;
 }
@@ -454,7 +497,8 @@ function setButtonResult(button, ok, text = "done") {
   button.dataset.busy = "false";
   button.dataset.feedback = ok ? "ok" : "fail";
   button.removeAttribute("aria-busy");
-  button.textContent = ok ? base : `${base} !`;
+  button.dataset.statusText = ok ? "done" : "failed";
+  button.textContent = base;
   button.title = text;
   flashNode(button, "tap-flash");
   const timer = window.setTimeout(() => {
@@ -743,6 +787,7 @@ function markDraftDirty() {
     configEventStore.append("CONFIG_CHANGED", { dirty: true });
   }
   document.body.classList.add("draft-dirty");
+  updateActionPresentation();
   if (firstDirty) {
     setCommandStatus("Draft changed · save config to apply");
   }
@@ -754,6 +799,7 @@ function clearDraftDirty() {
   uiStore.dispatch({ type: "DRAFT_CLEAN" });
   configEventStore.append("CONFIG_SAVED", { dirty: false });
   document.body.classList.remove("draft-dirty");
+  updateActionPresentation();
 }
 
 function toggle(id) {
@@ -859,6 +905,23 @@ function commandPending(...commands) {
   return Object.values(pendingCommandsSnapshot()).some((entry) => wanted.has(entry?.command));
 }
 
+function normalizeButtonVisualStates(root = document) {
+  for (const button of root.querySelectorAll?.("button") || []) {
+    const busy = buttonIsBusy(button) || button.getAttribute("aria-busy") === "true";
+    const pressed = button.getAttribute("aria-pressed");
+    const done = button.classList.contains("is-done");
+    const warn = button.classList.contains("is-warn");
+    const active = button.classList.contains("is-active") || (button.classList.contains("switch") && pressed === "true");
+    const state = busy
+      ? "pending"
+      : (button.disabled
+        ? "disabled"
+        : (done ? "done" : (warn ? "warn" : (active ? "active" : "ready"))));
+    button.dataset.state = state;
+    if (!button.dataset.baseLabel) button.dataset.baseLabel = button.textContent;
+  }
+}
+
 function setActionControl(buttonOrId, options = {}) {
   const button = typeof buttonOrId === "string" ? el[buttonOrId] : buttonOrId;
   if (!button) return;
@@ -875,10 +938,10 @@ function setActionControl(buttonOrId, options = {}) {
   const busy = locallyBusy || !!pending;
   const hasTransientFeedback = !!button.dataset.feedback && button.dataset.feedback !== "busy";
   button.disabled = !!(!enabled || busy);
-  button.classList.toggle("is-active", !!active && !done);
-  button.classList.toggle("is-done", !!done);
-  button.classList.toggle("is-warn", !!warn && !done);
-  button.dataset.state = busy ? "pending" : (done ? "done" : (active ? "active" : (warn ? "warn" : (!enabled ? "disabled" : "ready"))));
+  button.classList.toggle("is-active", !!active && !done && !!enabled && !busy);
+  button.classList.toggle("is-done", !!done && !busy);
+  button.classList.toggle("is-warn", !!warn && !done && !!enabled && !busy);
+  button.dataset.state = busy ? "pending" : (!enabled ? "disabled" : (done ? "done" : (warn ? "warn" : (active ? "active" : "ready"))));
   if (busy) {
     button.setAttribute("aria-busy", "true");
   } else if (!locallyBusy) {
@@ -890,6 +953,125 @@ function setActionControl(buttonOrId, options = {}) {
   } else if (reason && !locallyBusy) {
     button.title = reason;
   }
+}
+
+function floorPreviewAvailable() {
+  return !!el.floorAssistPreview?.getAttribute("src");
+}
+
+function cropRectIsFullFrame(rect = currentCropRect()) {
+  return rect.x <= 0.001 && rect.y <= 0.001 && rect.w >= 0.999 && rect.h >= 0.999;
+}
+
+function wallSlotHasData(slot = currentWallRectangle()) {
+  return !!(slot?.geometry?.valid || (Array.isArray(slot?.corners) && slot.corners.length > 0));
+}
+
+function anyWallSlotHasData() {
+  ensureWallRectangles();
+  return wallRectangles.some((slot) => wallSlotHasData(slot));
+}
+
+function setBridgeAction(id, command, options = {}) {
+  const bridgeReady = webviewAvailable();
+  const reason = !bridgeReady
+    ? "Backend bridge is unavailable"
+    : (options.reason || commandLabel(command));
+  setActionControl(el[id], Object.assign({}, options, {
+    enabled: bridgeReady && options.enabled !== false,
+    pending: commandPending(command),
+    reason
+  }));
+}
+
+function updateActionPresentation() {
+  const bridgeReady = webviewAvailable();
+  const previewReady = floorPreviewAvailable();
+  const crop = currentCropRect();
+  const cropFull = cropRectIsFullFrame(crop) && !checked("cropToggle");
+  const wallSlot = currentWallRectangle();
+  const wallReady = Array.isArray(wallSlot?.corners) && wallSlot.corners.length >= 4;
+  const wallSolved = !!wallSlot?.geometry?.valid;
+  const wallHasData = wallSlotHasData(wallSlot);
+  const floorReady = floorMarks.length >= 3;
+  const floorAccepted = acceptedProjectiveFloorGeometry() || acceptedScalarFloorGeometry() || acceptedManualPlankGeometry();
+  const anyDrawing = cropDrawing || cropAdjust || floorMarking || floorMarks.length > 0 || anyWallSlotHasData();
+
+  setBridgeAction("openModels", "openModelsFolder", { reason: "Open model asset folder" });
+  setBridgeAction("rescanModel", "rescanModel", { reason: "Reload model asset and device status" });
+  setBridgeAction("openCalib", "openCalibrationFolder", { reason: "Open calibration folder" });
+  setBridgeAction("createCalib", "createCalibrationTemplate", { reason: "Create a calibration template" });
+  setBridgeAction("openBuild", "openBuildFolder", { reason: "Open build output folder" });
+  setBridgeAction("prepDeploy", "prepareDeployFolder", { reason: "Prepare deploy folder" });
+
+  const selectedDevice = el.inferenceDevice?.value || "";
+  const activeDevice = current.config?.inference?.device || current.model?.active_device || "";
+  setActionControl(el.applyInferenceDevice, {
+    enabled: bridgeReady && !commandPending("saveConfig", "stopRuntime", "startRuntime", "rescanModel"),
+    pending: commandPending("saveConfig", "stopRuntime", "startRuntime", "rescanModel"),
+    active: selectedDevice !== "" && selectedDevice !== activeDevice,
+    done: selectedDevice !== "" && selectedDevice === activeDevice,
+    reason: bridgeReady ? "Save selected inference device and refresh runtime model state" : "Backend bridge is unavailable"
+  });
+
+  setBridgeAction("refreshPreview", "refreshCameraPreview", {
+    active: !previewReady,
+    reason: previewReady ? "Refresh the current camera setup preview" : `Refresh ${activeFloorCameraLabel()} preview before drawing`
+  });
+  setActionControl(el.cropDraw, {
+    enabled: previewReady && !cropDrawing,
+    active: cropDrawing,
+    reason: previewReady ? "Draw Camera A crop rectangle on the preview" : "Refresh preview before drawing crop"
+  });
+  setActionControl(el.cropFull, {
+    enabled: !cropFull,
+    done: cropFull,
+    reason: cropFull ? "Camera A already uses full frame" : "Reset Camera A crop to full frame"
+  });
+  setBridgeAction("floorManualApply", "calibrateFloorGeometryBackend", {
+    enabled: bridgeReady && floorReady,
+    active: floorReady && !floorAccepted,
+    done: floorAccepted && !floorMarking,
+    reason: floorReady ? "Solve drawn plank geometry" : "Draw two long plank edges plus one short end cap first"
+  });
+  setActionControl(el.floorMarkStart, {
+    enabled: previewReady,
+    active: floorMarking && floorMarkMode === "plank",
+    reason: previewReady ? "Draw one visible floor plank" : `Refresh ${activeFloorCameraLabel()} preview before drawing`
+  });
+  setActionControl(el.floorWallStart, {
+    enabled: previewReady,
+    active: floorMarking && floorMarkMode === "wall",
+    reason: previewReady ? "Draw four corners of one rectangular wall object" : `Refresh ${activeFloorCameraLabel()} preview before drawing`
+  });
+  setActionControl(el.wallApplySelected, {
+    enabled: bridgeReady && wallReady,
+    active: wallReady && !wallSolved,
+    done: wallSolved,
+    reason: wallReady ? `Solve ${wallSlotLabel()} wall sample` : "Click four corners before solving this wall sample"
+  });
+  setActionControl(el.wallClearSelected, {
+    enabled: wallHasData,
+    warn: wallHasData,
+    reason: wallHasData ? `Clear ${wallSlotLabel()}` : `${wallSlotLabel()} has no marks to clear`
+  });
+  setActionControl(el.floorMarkClear, {
+    enabled: anyDrawing || floorAccepted,
+    warn: anyDrawing || floorAccepted,
+    reason: anyDrawing || floorAccepted ? "Clear current drawing and local geometry hints" : "No drawing or local geometry to clear"
+  });
+  setActionControl(el.trackerSpaceIdentity, {
+    enabled: true,
+    reason: "Load an identity transform draft into tracker-space fields"
+  });
+  const trackerSpaceState = trackerSpaceLocalStatus();
+  setActionControl(el.trackerSpaceValidate, {
+    enabled: true,
+    active: trackerSpaceState.status !== "valid",
+    done: trackerSpaceState.status === "valid" && checked("trackerSpaceValidToggle"),
+    reason: "Validate tracker-space numbers locally before saving"
+  });
+  normalizeButtonVisualStates();
 }
 
 function positiveIndex(value) {
@@ -1556,6 +1738,7 @@ function renderFloorAssist(mode) {
     updateWallRectangleStatus();
     updateFloorMarkOverlay();
     updateBodyPoseOverlay();
+    updateActionPresentation();
   }
 
 }
@@ -3089,6 +3272,7 @@ function render(state) {
     reason: localDraftDirty ? "Save modified advanced configuration" : "Advanced configuration matches backend state"
   });
   renderPet(current);
+  updateActionPresentation();
 }
 
 
@@ -3112,8 +3296,8 @@ function handleReply(message) {
   const envelope = entry.envelope || {};
   const statusClass = result.status_class || (ok ? "ok" : "failed_fatal");
   const text = ok
-    ? `${entry.command}: ${result.warning || result.status || statusClass || "ok"}`
-    : `${entry.command}: ${message.error || result.status || statusClass || "failed"}`;
+    ? `${commandLabel(entry.command)}: ${result.warning || result.status || statusClass || "ok"}`
+    : `${commandLabel(entry.command)}: ${message.error || result.status || statusClass || "failed"}`;
   const statusState = (statusClass === "warning" || statusClass === "degraded") ? "warn" : ok;
   setBridge(ok ? "CONNECTED" : "ERROR", ok);
   if (!envelope.silentReply) {
@@ -3597,3 +3781,4 @@ if (webviewAvailable()) {
 
 bindEvents();
 setCommandStatus("READY");
+updateActionPresentation();
