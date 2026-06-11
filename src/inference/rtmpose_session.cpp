@@ -176,6 +176,10 @@ Status RtmPoseSession::Load(const std::filesystem::path& model_path, const std::
                     return dml;
                 }
                 ep_fallback = true;
+                // The session will run on CPU; restore the CPU optimization level
+                // instead of keeping the DirectML-specific ORT_DISABLE_ALL, which
+                // would silently run the CPU path unoptimized.
+                impl_->session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
                 bt::Logger::Instance().Write(
                     bt::LogLevel::Warn,
                     "DirectML execution provider unavailable; falling back to CPU: " + dml.message);

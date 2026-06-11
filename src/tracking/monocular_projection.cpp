@@ -1,4 +1,4 @@
-﻿#include "tracking/monocular_projection.h"
+#include "tracking/monocular_projection.h"
 
 #include "inference/keypoint_contract.h"
 #include "tracking/tracking_constants.h"
@@ -73,10 +73,17 @@ bool FinitePositive(float v) {
     return std::isfinite(v) && v > 0.0f;
 }
 
-bool PixelUsable(const Keypoint2D& kp, float /*weight*/, const MonocularTrackingConfig& /*config*/) {
+bool PixelUsable(const Keypoint2D& kp, float weight, const MonocularTrackingConfig& config) {
+    // Honor the operator-facing min_keypoint_confidence contract: keypoints below
+    // the configured detection floor are not usable measurement seeds. The
+    // reliability weight only scales output confidence; it must not silently
+    // delete an otherwise valid detection.
+    (void)weight;
     return kp.present &&
         std::isfinite(kp.pixel.x) &&
-        std::isfinite(kp.pixel.y);
+        std::isfinite(kp.pixel.y) &&
+        std::isfinite(kp.confidence) &&
+        kp.confidence >= config.min_keypoint_confidence;
 }
 
 bool ManualIntrinsicsUsable(const CameraCalibration& camera) {
@@ -831,6 +838,129 @@ float JointDepthForPixel(
     return depth.depth_m;
 }
 
+// --- Perspective depth lift -------------------------------------------------
+//
+// A single global depth back-projects the whole skeleton onto one
+// fronto-parallel plane: leaning, reaching toward the camera, and body yaw all
+// lose their depth component before the solver ever sees them. Each joint is
+// constrained to its camera ray P(Z) = C + Z * d, so a known metric bone
+// length L between a parent at depth Zp and a child on ray dc gives a
+// quadratic in the child depth Zc:
+//
+//   |Zc*dc - Zp*dp|^2 = L^2
+//   a = |dc|^2,  b = -2*Zp*(dc.dp),  c = Zp^2*|dp|^2 - L^2
+//
+// The two roots are the toward/away ambiguity. Legs and feet are excluded:
+// floor-contact keypoints already carry measured floor-ray/homography depths,
+// and the lower-body IK solve owns leg bone lengths downstream.
+
+struct PerspectiveLiftBone {
+    KeypointId parent;
+    KeypointId child;
+    float stature_fraction;
+};
+
+// Stature fractions from standard anthropometry: upper arm 0.186H,
+// forearm 0.146H, biacromial half-width 0.129H, pelvis-to-C7 torso 0.288H,
+// C7-to-vertex 0.182H.
+constexpr std::array<PerspectiveLiftBone, 8> kPerspectiveLiftBones{{
+    {KeypointId::Pelvis, KeypointId::Neck, 0.288f},
+    {KeypointId::Neck, KeypointId::HeadTop, 0.182f},
+    {KeypointId::Neck, KeypointId::LeftShoulder, 0.129f},
+    {KeypointId::Neck, KeypointId::RightShoulder, 0.129f},
+    {KeypointId::LeftShoulder, KeypointId::LeftElbow, 0.186f},
+    {KeypointId::RightShoulder, KeypointId::RightElbow, 0.186f},
+    {KeypointId::LeftElbow, KeypointId::LeftWrist, 0.146f},
+    {KeypointId::RightElbow, KeypointId::RightWrist, 0.146f}
+}};
+
+Vec3f PixelRayDirection(const MonocularProjectionProfile& profile, const Vec2f& pixel) {
+    return Vec3f{
+        (pixel.x - profile.cx) / profile.fx,
+        (pixel.y - profile.cy) / profile.fy,
+        1.0f};
+}
+
+int RefinePerspectiveDepths(
+    const KeypointArray& keypoints,
+    const std::array<float, kHalpe26Count>& weights,
+    const MonocularProjectionProfile& profile,
+    const MonocularTrackingConfig& config,
+    std::array<float, kHalpe26Count>& joint_depths) {
+
+    const float stature_m = Clamp(config.user_height_m, 1.00f, 2.30f);
+    int lifted = 0;
+
+    for (const auto& bone : kPerspectiveLiftBones) {
+        const std::size_t parent = static_cast<std::size_t>(bone.parent);
+        const std::size_t child = static_cast<std::size_t>(bone.child);
+        if (!PixelUsable(keypoints[parent], weights[parent], config) ||
+            !PixelUsable(keypoints[child], weights[child], config) ||
+            !FinitePositive(joint_depths[parent]) ||
+            !FinitePositive(joint_depths[child])) {
+            continue;
+        }
+
+        const float length_m = bone.stature_fraction * stature_m;
+        const float prior = joint_depths[child];
+        const float zp = joint_depths[parent];
+        const Vec3f dp = PixelRayDirection(profile, keypoints[parent].pixel);
+        const Vec3f dc = PixelRayDirection(profile, keypoints[child].pixel);
+
+        const float a = Dot(dc, dc);
+        const float b = -2.0f * zp * Dot(dc, dp);
+        const float c = zp * zp * Dot(dp, dp) - length_m * length_m;
+        if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c) || a <= 0.0f) {
+            continue;
+        }
+
+        const float disc = b * b - 4.0f * a * c;
+        if (disc < 0.0f) {
+            // Bone overstretched at this 2D separation: that is a global
+            // scale inconsistency, not foreshortening signal. Do not guess.
+            continue;
+        }
+
+        // Foreshortening gate. A fronto-parallel bone under a typical +-10%
+        // global depth error can show a fake axial fraction, so depth injection
+        // ramps in only above that noise floor.
+        const float axial_fraction = std::sqrt(disc / (4.0f * a)) / length_m;
+        const float foreshortening_gain = Clamp01((axial_fraction - 0.45f) / 0.35f);
+        if (foreshortening_gain <= 0.0f) {
+            continue;
+        }
+
+        const float s = std::sqrt(disc);
+        const float near_root = (-b - s) / (2.0f * a);
+        const float far_root = (-b + s) / (2.0f * a);
+        // Toward/away ambiguity. Reference the refined parent depth; on a near
+        // tie take the camera-side root, matching the camera-facing VR reach use
+        // case while letting downstream temporal smoothing handle rare wrong picks.
+        const float near_err = std::abs(near_root - zp);
+        const float far_err = std::abs(far_root - zp);
+        float solved = std::abs(near_err - far_err) < 0.35f * length_m
+            ? std::min(near_root, far_root)
+            : (near_err <= far_err ? near_root : far_root);
+        if (!std::isfinite(solved)) {
+            continue;
+        }
+
+        solved = Clamp(solved, zp - length_m, zp + length_m);
+        const float trust = Clamp01(std::min(
+            keypoints[parent].confidence * Clamp01(weights[parent]),
+            keypoints[child].confidence * Clamp01(weights[child])));
+        const float refined = Clamp(
+            Lerp(prior, solved, trust * foreshortening_gain),
+            tracking_constants::kMonocularMinDepthM,
+            tracking_constants::kMonocularMaxDepthM);
+        if (std::abs(refined - prior) > 1e-4f) {
+            ++lifted;
+        }
+        joint_depths[child] = refined;
+    }
+    return lifted;
+}
+
 } // namespace
 
 MonocularProjectionProfile MakeMonocularProjectionProfile(
@@ -1026,9 +1156,32 @@ Result<MonocularMeasurementResult> BuildMonocularJointMeasurements(
         std::isfinite(result.hmd_depth_scale.scale) && result.hmd_depth_scale.scale > 0.0f &&
         manual_camera.extrinsics_valid;
     if (hmd_scale_usable) {
-        result.scale_source = MonocularScaleSource::BodyExtent;
+        // The metric scale now comes from the headset, not the silhouette.
+        // Mislabeling this as BodyExtent hid the active scale authority from telemetry.
+        result.scale_source = MonocularScaleSource::HmdDepthScale;
         result.estimated_depth_m = depth.depth_m * result.hmd_depth_scale.scale;
     }
+
+    // Flat per-joint depths first (global body depth plus measured local floor
+    // depths for feet/ankles), then the bone-length perspective lift recovers
+    // torso, head, and arm depth structure along their camera rays.
+    std::array<float, kHalpe26Count> joint_depths{};
+    for (const KeypointId id : kInternalKeypointOrder) {
+        const std::size_t i = static_cast<std::size_t>(id);
+        if (!PixelUsable(working_keypoints[i], Clamp01(reliability_weights[i]), config)) {
+            continue;
+        }
+        const float raw_joint_depth = JointDepthForPixel(id, profile, working_keypoints[i], depth);
+        joint_depths[i] = hmd_scale_usable
+            ? raw_joint_depth * result.hmd_depth_scale.scale
+            : raw_joint_depth;
+    }
+    result.perspective_lift_count = RefinePerspectiveDepths(
+        working_keypoints,
+        reliability_weights,
+        profile,
+        config,
+        joint_depths);
 
     float confidence_sum = 0.0f;
     int lower_body_valid_count = 0;
@@ -1040,10 +1193,7 @@ Result<MonocularMeasurementResult> BuildMonocularJointMeasurements(
             continue;
         }
 
-        const float raw_joint_depth = JointDepthForPixel(id, profile, working_keypoints[i], depth);
-        const float joint_depth = hmd_scale_usable
-            ? raw_joint_depth * result.hmd_depth_scale.scale
-            : raw_joint_depth;
+        const float joint_depth = joint_depths[i];
         Result<Vec3f> world = Status::Error(StatusCode::InvalidArgument, "Invalid monocular projection input");
         if (hmd_scale_usable) {
             const Vec3f camera_point = HmdDepthBackProjectCamera(

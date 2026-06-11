@@ -9,45 +9,17 @@
 namespace bt {
 namespace {
 
-float Clamp01(float value) {
-    return std::clamp(value, 0.0f, 1.0f);
-}
-
-float FootMeasurementTrust(
-    float body_confidence,
-    const TrackerEvidence& evidence,
-    const FootSupportState& support) {
-
-    float trust = Clamp01(body_confidence);
-    switch (evidence.source) {
-    case TrackerEvidenceSource::DirectStereo:
-    case TrackerEvidenceSource::ReplayInput:
-    case TrackerEvidenceSource::InferredMonocular:
-        trust = std::max(trust, Clamp01(evidence.direct_confidence));
-        break;
-    case TrackerEvidenceSource::AnchorHeld:
-        trust = std::max(trust, Clamp01(evidence.support_confidence));
-        break;
-    case TrackerEvidenceSource::HmdPrediction:
-    case TrackerEvidenceSource::Predicted:
-    case TrackerEvidenceSource::None:
-    default:
-        break;
-    }
-    trust = std::max(trust, Clamp01(FootSupportConfidence(support)));
-    return trust;
-}
-
 float FootCorrectionGain(
     const FootSupportState& support,
-    const TrackerEvidence& evidence,
-    float body_confidence,
     const TemporalUpdateConfig& config) {
 
-    const float base = IsActiveFootSupport(support)
+    // foot_free_gain / foot_supported_gain use normal blend semantics:
+    // corrected = predicted + gain * (measured - predicted). The configured gain
+    // is honored as-is; measurement quality is expressed through the support
+    // manifold and exported confidence, not by silently rescaling the gain.
+    return IsActiveFootSupport(support)
         ? config.foot_supported_gain
         : config.foot_free_gain;
-    return base * FootMeasurementTrust(body_confidence, evidence, support);
 }
 
 Pose3f BlendPose(const Pose3f& a, const Pose3f& b, float gain) {
@@ -174,11 +146,12 @@ LowerBodyState CorrectState(
 
     LowerBodyState out = predicted;
     const bool supported = measured.support.root_support != RootSupportType::None;
-    // Confidence controls correction strength, not whether a pose exists. A finite
-    // but zero/weak-confidence monocular solve may be useful to expose, but it
-    // must not yank the temporal state at full strength and create SteamVR jitter.
-    const float gain = (supported ? config.supported_gain : config.free_gain) *
-        Clamp01(measured.confidence);
+    // The configured gain is the correction strength. Do not multiply it by
+    // measurement confidence: that quietly turns a configured free_gain into a
+    // dead control for weak/zero-confidence solves. Weak solves are already
+    // softened upstream by the motion consistency filter and confidence policy,
+    // and the measured confidence is still exported on the corrected state below.
+    const float gain = supported ? config.supported_gain : config.free_gain;
     const float dt = static_cast<float>(dt_seconds);
     const Vec3f previous_root = Sub(predicted.root.position, Scale(predicted.linear_velocity, dt));
     const Quatf root_rotation_delta = QuatFromAngularVelocity(predicted.angular_velocity, dt);
@@ -207,21 +180,13 @@ LowerBodyState CorrectState(
             predicted.left_foot,
             measured.left_foot,
             measured.support.left_foot,
-            FootCorrectionGain(
-                measured.support.left_foot,
-                measured.left_foot_evidence,
-                measured.confidence,
-                config),
+            FootCorrectionGain(measured.support.left_foot, config),
             FootLengthFor(model, true));
         out.right_foot = CorrectFootPose(
             predicted.right_foot,
             measured.right_foot,
             measured.support.right_foot,
-            FootCorrectionGain(
-                measured.support.right_foot,
-                measured.right_foot_evidence,
-                measured.confidence,
-                config),
+            FootCorrectionGain(measured.support.right_foot, config),
             FootLengthFor(model, false));
     }
 

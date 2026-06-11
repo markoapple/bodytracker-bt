@@ -1,5 +1,6 @@
 #include "io/steamvr_tracker_bridge.h"
 
+#include "io/bridge_protocol.h"
 #include "io/osc_sender.h"
 
 #include <array>
@@ -33,34 +34,10 @@ using SocketHandle = int;
 constexpr SocketHandle kInvalidSocket = -1;
 #endif
 
-constexpr std::uint32_t kSteamVrBridgeMagic = 0x54535442u; // "BTST" little-endian.
-constexpr std::uint16_t kSteamVrBridgeVersion = 1;
-
-#pragma pack(push, 1)
-struct BridgeRolePacket {
-    std::uint8_t role = 0;
-    std::uint8_t valid = 0;
-    std::uint8_t degraded = 0;
-    std::uint8_t reserved = 0;
-    float confidence = 0.0f;
-    float px = 0.0f;
-    float py = 0.0f;
-    float pz = 0.0f;
-    float qx = 0.0f;
-    float qy = 0.0f;
-    float qz = 0.0f;
-    float qw = 1.0f;
-};
-
-struct BridgePacket {
-    std::uint32_t magic = kSteamVrBridgeMagic;
-    std::uint16_t version = kSteamVrBridgeVersion;
-    std::uint16_t role_count = static_cast<std::uint16_t>(kTrackerPoseCount);
-    std::uint64_t sequence = 0;
-    double timestamp_seconds = 0.0;
-    std::array<BridgeRolePacket, kTrackerPoseCount> roles{};
-};
-#pragma pack(pop)
+using bridge_protocol::BridgePacket;
+using bridge_protocol::BridgeRolePacket;
+static_assert(bridge_protocol::kRoleCount == kTrackerPoseCount,
+    "bridge protocol role count must match tracker pose count");
 
 SocketHandle ToSocket(std::intptr_t value) {
     return static_cast<SocketHandle>(value);

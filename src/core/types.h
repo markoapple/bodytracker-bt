@@ -49,7 +49,8 @@ enum class MonocularScaleSource : std::uint8_t {
     FloorSpacing = 3,
     FloorProjective = 4,
     DefaultDepth = 5,
-    WallDepth = 6
+    WallDepth = 6,
+    HmdDepthScale = 7
 };
 
 inline const char* ToString(TrackingMode mode) {
@@ -91,6 +92,7 @@ inline const char* ToString(MonocularScaleSource source) {
     case MonocularScaleSource::FloorProjective: return "floor_projective";
     case MonocularScaleSource::DefaultDepth: return "default_depth";
     case MonocularScaleSource::WallDepth: return "wall_depth";
+    case MonocularScaleSource::HmdDepthScale: return "hmd_depth_scale";
     default: return "unknown";
     }
 }

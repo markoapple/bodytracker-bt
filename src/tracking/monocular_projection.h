@@ -41,6 +41,9 @@ struct MonocularMeasurementResult {
     float floor_assist_confidence = 0.0f;
     bool distortion_correction_used = false;
     bool camera_orientation_correction_used = false;
+    // Number of joints whose depth was adjusted by the bone-length
+    // perspective lift (torso/head/arm depth structure recovery).
+    int perspective_lift_count = 0;
     HmdDepthScaleResult hmd_depth_scale{};
     HmdDepthScaleHistory hmd_depth_scale_history{};
     RawAnchorWorlds anchor_raw_worlds{};

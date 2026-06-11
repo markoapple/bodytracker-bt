@@ -567,5 +567,94 @@ int main() {
         config);
     BT_CHECK(!rejected.ok());
 
+
+    // --- Perspective lift: bone-length depth recovery ----------------------
+    // Ground truth: a person standing 2.6m from the camera, left arm reaching
+    // straight toward the camera, right arm hanging at the side. Project the
+    // 3D skeleton through the profile, run the 2D->3D conversion, and require
+    // the lift to recover the reach: without it both wrists sit on the same
+    // depth plane.
+    {
+        const float stand_z = 2.6f;
+        const float h = config.user_height_m;
+        const float cam_h = config.camera_height_m;
+        const auto project = [&](float x_m, float y_m, float z_m) {
+            return bt::Vec2f{
+                profile.fx * x_m / z_m + profile.cx,
+                profile.fy * (cam_h - y_m) / z_m + profile.cy};
+        };
+        const auto put_world = [&](bt::KeypointArray& kps, bt::KeypointId id, float x, float y, float z) {
+            const auto px = project(x, y, z);
+            Put(kps, id, px.x, px.y);
+        };
+
+        bt::KeypointArray reach_pose{};
+        const float shoulder_y = 0.818f * h;
+        const float pelvis_y = 0.530f * h;
+        const float half_shoulder = 0.129f * h;
+        const float upper_arm = 0.186f * h;
+        const float forearm = 0.146f * h;
+        put_world(reach_pose, bt::KeypointId::HeadTop, 0.0f, h, stand_z);
+        put_world(reach_pose, bt::KeypointId::Neck, 0.0f, shoulder_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::Pelvis, 0.0f, pelvis_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftHip, -0.09f, pelvis_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::RightHip, 0.09f, pelvis_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftShoulder, -half_shoulder, shoulder_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::RightShoulder, half_shoulder, shoulder_y, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftElbow, -half_shoulder + 0.02f, shoulder_y - 0.02f, stand_z - upper_arm);
+        put_world(reach_pose, bt::KeypointId::LeftWrist, -half_shoulder + 0.04f, shoulder_y - 0.04f, stand_z - upper_arm - forearm);
+        put_world(reach_pose, bt::KeypointId::RightElbow, half_shoulder + 0.03f, shoulder_y - upper_arm, stand_z);
+        put_world(reach_pose, bt::KeypointId::RightWrist, half_shoulder + 0.05f, shoulder_y - upper_arm - forearm, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftKnee, -0.10f, 0.285f * h, stand_z);
+        put_world(reach_pose, bt::KeypointId::RightKnee, 0.10f, 0.285f * h, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftAnkle, -0.10f, 0.039f * h, stand_z);
+        put_world(reach_pose, bt::KeypointId::RightAnkle, 0.10f, 0.039f * h, stand_z);
+        put_world(reach_pose, bt::KeypointId::LeftHeel, -0.10f, 0.0f, stand_z + 0.05f);
+        put_world(reach_pose, bt::KeypointId::RightHeel, 0.10f, 0.0f, stand_z + 0.05f);
+        put_world(reach_pose, bt::KeypointId::LeftBigToe, -0.10f, 0.0f, stand_z - 0.18f);
+        put_world(reach_pose, bt::KeypointId::RightBigToe, 0.10f, 0.0f, stand_z - 0.18f);
+
+        const auto reach = bt::BuildMonocularJointMeasurements(
+            reach_pose,
+            weights,
+            no_chessboard_calibration,
+            config);
+        BT_CHECK(reach.ok());
+        BT_CHECK(reach.value().perspective_lift_count > 0);
+
+        const auto& left_wrist = reach.value().joints[Index(bt::KeypointId::LeftWrist)];
+        const auto& right_wrist = reach.value().joints[Index(bt::KeypointId::RightWrist)];
+        const auto& left_shoulder = reach.value().joints[Index(bt::KeypointId::LeftShoulder)];
+        BT_CHECK(left_wrist.present && right_wrist.present && left_shoulder.present);
+
+        const float left_reach_m = left_shoulder.estimated_depth_m - left_wrist.estimated_depth_m;
+        const float right_offset_m = std::abs(right_wrist.estimated_depth_m - left_shoulder.estimated_depth_m);
+        BT_CHECK(left_reach_m > 0.30f);
+        BT_CHECK(right_offset_m < 0.15f);
+
+        const auto& left_elbow = reach.value().joints[Index(bt::KeypointId::LeftElbow)];
+        BT_CHECK(left_elbow.present);
+        const float lifted_upper_arm = std::sqrt(
+            (left_elbow.world.x - left_shoulder.world.x) * (left_elbow.world.x - left_shoulder.world.x) +
+            (left_elbow.world.y - left_shoulder.world.y) * (left_elbow.world.y - left_shoulder.world.y) +
+            (left_elbow.world.z - left_shoulder.world.z) * (left_elbow.world.z - left_shoulder.world.z));
+        BT_CHECK(std::abs(lifted_upper_arm - upper_arm) < 0.45f * upper_arm);
+
+        bt::KeypointArray flat_pose = reach_pose;
+        put_world(flat_pose, bt::KeypointId::LeftElbow, -half_shoulder - 0.03f, shoulder_y - upper_arm, stand_z);
+        put_world(flat_pose, bt::KeypointId::LeftWrist, -half_shoulder - 0.05f, shoulder_y - upper_arm - forearm, stand_z);
+        const auto flat = bt::BuildMonocularJointMeasurements(
+            flat_pose,
+            weights,
+            no_chessboard_calibration,
+            config);
+        BT_CHECK(flat.ok());
+        const auto& flat_left_wrist = flat.value().joints[Index(bt::KeypointId::LeftWrist)];
+        const auto& flat_neck = flat.value().joints[Index(bt::KeypointId::Neck)];
+        BT_CHECK(flat_left_wrist.present && flat_neck.present);
+        BT_CHECK(std::abs(flat_left_wrist.estimated_depth_m - flat_neck.estimated_depth_m) < 0.22f);
+    }
+
+
     return 0;
 }

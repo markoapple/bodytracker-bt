@@ -8,6 +8,8 @@
 
 #include <openvr_driver.h>
 
+#include "../io/bridge_protocol.h"
+
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -19,37 +21,13 @@
 
 namespace {
 
-constexpr std::uint32_t kMagic = 0x54535442u; // "BTST" little-endian.
-constexpr std::uint16_t kVersion = 1;
-constexpr std::size_t kRoleCount = 8;
-constexpr int kListenPort = 39560;
+using bt::bridge_protocol::BridgePacket;
+using bt::bridge_protocol::BridgeRolePacket;
+constexpr std::uint32_t kMagic = bt::bridge_protocol::kMagic;
+constexpr std::uint16_t kVersion = bt::bridge_protocol::kVersion;
+constexpr std::size_t kRoleCount = bt::bridge_protocol::kRoleCount;
+constexpr int kListenPort = bt::bridge_protocol::kPort;
 constexpr double kPoseTimeoutSeconds = 0.35;
-
-#pragma pack(push, 1)
-struct BridgeRolePacket {
-    std::uint8_t role;
-    std::uint8_t valid;
-    std::uint8_t degraded;
-    std::uint8_t reserved;
-    float confidence;
-    float px;
-    float py;
-    float pz;
-    float qx;
-    float qy;
-    float qz;
-    float qw;
-};
-
-struct BridgePacket {
-    std::uint32_t magic;
-    std::uint16_t version;
-    std::uint16_t role_count;
-    std::uint64_t sequence;
-    double timestamp_seconds;
-    std::array<BridgeRolePacket, kRoleCount> roles;
-};
-#pragma pack(pop)
 
 struct RoleState {
     bool valid = false;
