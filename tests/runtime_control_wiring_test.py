@@ -152,10 +152,10 @@ class RuntimeControlWiringTest(unittest.TestCase):
 
     def test_start_button_saves_visible_ui_config_before_launching_runtime(self) -> None:
         app_js = (REPO_ROOT / "src" / "ui" / "app" / "app.js").read_text(encoding="utf-8")
-        start_block = app_js[app_js.index('el.startRuntime?.addEventListener("click"'):app_js.index('bindClick("stopRuntime"')]
+        start_block = app_js[app_js.index('el.startRuntime?.addEventListener("click"'):app_js.index('bindAction("stopRuntime"')]
         self.assertIn('saveVisibleConfig("Manual plank refresh before runtime start")', start_block)
-        self.assertIn('sendCommand("startRuntime")', start_block)
-        self.assertLess(start_block.index('saveVisibleConfig("Manual plank refresh before runtime start")'), start_block.index('sendCommand("startRuntime")'))
+        self.assertIn('sendCommand("startRuntime", {}, null, { actionId: "startRuntime" })', start_block)
+        self.assertLess(start_block.index('saveVisibleConfig("Manual plank refresh before runtime start")'), start_block.index('sendCommand("startRuntime", {}, null, { actionId: "startRuntime" })'))
 
     def test_manual_plank_is_recomputed_before_save_and_runtime_start(self) -> None:
         app_js = (REPO_ROOT / "src" / "ui" / "app" / "app.js").read_text(encoding="utf-8")
@@ -163,7 +163,7 @@ class RuntimeControlWiringTest(unittest.TestCase):
         self.assertIn('if (floorGeometryCleared || floorMarks.length < 3) return true;', app_js)
         self.assertIn('return applyManualFloorLines(sourceLabel, { keepDrawing: floorMarking && floorMarks.length < 4 });', app_js)
         self.assertIn('async function saveVisibleConfig', app_js)
-        self.assertIn('return sendCommand("saveConfig", readPayload());', app_js)
+        self.assertIn('return sendCommand("saveConfig", readPayload(), null, { actionId: "saveConfig" });', app_js)
         self.assertIn('el.saveConfig?.addEventListener("click", () => withButtonFeedback(el.saveConfig, "saveConfig", () => saveVisibleConfig("Manual plank refresh before save")));', app_js)
         self.assertIn('el.saveAdvanced?.addEventListener("click", () => withButtonFeedback(el.saveAdvanced, "saveConfig", () => saveVisibleConfig("Manual plank refresh before advanced save")));', app_js)
 
@@ -174,7 +174,7 @@ class RuntimeControlWiringTest(unittest.TestCase):
         self.assertIn('id="refreshPreview"', index_html)
         self.assertIn('el.refreshPreview?.addEventListener("click", async () => {', app_js)
         self.assertIn('const cameraSlot = activeFloorCameraKey();', app_js)
-        self.assertIn('sendCommand("refreshCameraPreview", { camera_a: cameraIndexForFloorSlot(cameraSlot), camera_slot: cameraSlot }, null, { silentReply: true })', app_js)
+        self.assertIn('sendCommand("refreshCameraPreview", { camera_a: cameraIndexForFloorSlot(cameraSlot), camera_slot: cameraSlot }, null, { actionId: "refreshPreview", silentReply: true })', app_js)
         self.assertIn('camera.preview = result.preview;', app_js)
         self.assertIn('renderFloorAssist(trackingMode());', app_js)
         self.assertIn('if (command == "refreshCameraPreview")', main_cpp)
@@ -686,7 +686,7 @@ class RuntimeControlWiringTest(unittest.TestCase):
         self.assertIn('if (ok && entry.command === "saveConfig")', app_js)
         toggle_block = app_js[app_js.index("function bindToggle"):app_js.index("function bindEvents")]
         self.assertIn("markDraftDirty();", toggle_block)
-        focus_block = app_js[app_js.index('document.addEventListener("input"'):app_js.index('bindClick("scanCams"')]
+        focus_block = app_js[app_js.index('document.addEventListener("input"'):app_js.index('bindAction("scanCams"')]
         self.assertIn("markDraftDirty();", focus_block)
         self.assertIn("syncInputs = !localDraftDirty && !editingFormControl();", focus_block)
 
@@ -993,7 +993,7 @@ class RuntimeControlWiringTest(unittest.TestCase):
         self.assertIn("steamVrRequiredLandmarkKeys", app_js)
         self.assertIn("steamVrRequiredComplete(acceptedKeys)", app_js)
         self.assertIn("setActionControl(el.steamVrAlignFinish", app_js)
-        self.assertIn("enabled: sessionActive && requiredMet && !busy", app_js)
+        self.assertIn("enabled: bridgeReady && sessionActive && requiredMet && !busy", app_js)
         self.assertIn("commandPending(\"steamVrAlignmentFinish\")", app_js)
         self.assertIn('data-wiz="chest"', html)
         self.assertIn('data-wiz="left_elbow"', html)

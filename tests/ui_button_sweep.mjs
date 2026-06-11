@@ -30,6 +30,40 @@ const commandIds = [
   "steamVrAlignmentClear"
 ];
 
+const bridgeButtonIds = [
+  "scanCams",
+  "phoneSiteEnable",
+  "phoneSiteOpen",
+  "phoneSiteDisable",
+  "openModels",
+  "openCalib",
+  "createCalib",
+  "openBuild",
+  "prepDeploy",
+  "rescanModel",
+  "applyInferenceDevice",
+  "startRuntime",
+  "stopRuntime",
+  "saveConfig",
+  "saveAdvanced",
+  "refreshPreview",
+  "floorManualApply",
+  "wallApplySelected",
+  "steamVrAlignStart",
+  "steamVrAlignLeftFoot",
+  "steamVrAlignRightFoot",
+  "steamVrAlignPelvis",
+  "steamVrAlignFloor",
+  "steamVrAlignForward",
+  "steamVrAlignChest",
+  "steamVrAlignLeftElbow",
+  "steamVrAlignRightElbow",
+  "steamVrAlignLeftKnee",
+  "steamVrAlignRightKnee",
+  "steamVrAlignFinish",
+  "steamVrAlignClear"
+];
+
 async function loadPlaywright() {
   const candidates = [
     "playwright-core",
@@ -157,15 +191,25 @@ async function installBridge(page) {
       if (message.command === "steamVrAlignmentClear") result.steamvr_alignment = mockSteamVrState({ active: false });
       return result;
     }
-    window.chrome = { webview: {
+    const bridgeObject = { webview: {
       addEventListener(type, handler) { if (type === "message") listeners.push(handler); },
       postMessage(message) {
         commands.push(message);
         setTimeout(() => listeners.forEach((handler) => handler({ data: { type: "reply", id: message.id, ok: true, result: replyFor(message) } })), 25);
       }
     } };
+    window.chrome = bridgeObject;
     window.__postedCommands = commands;
-    window.__sendState = (state) => listeners.forEach((handler) => handler({ data: { type: "state", state } }));
+    window.__lastBtState = null;
+    window.__sendState = (state) => {
+      window.__lastBtState = state;
+      listeners.forEach((handler) => handler({ data: { type: "state", state } }));
+    };
+    window.__setBridgeOnline = (online) => {
+      window.chrome = online ? bridgeObject : {};
+      if (typeof window.render === "function" && window.__lastBtState) window.render(window.__lastBtState);
+      if (typeof window.updateActionPresentation === "function") window.updateActionPresentation();
+    };
   });
 }
 
@@ -173,11 +217,69 @@ async function assertHealthy(page, context) {
   const status = await page.locator("#commandStatus").textContent();
   assert(!status.includes("JS error"), `${context}: ${status}`);
   assert(!status.includes("Unhandled promise rejection"), `${context}: ${status}`);
+  assert(!status.includes("�"), `${context}: replacement glyph leaked into status: ${status}`);
   for (const command of commandIds) assert(!status.includes(command), `${context}: raw command id leaked into status: ${status}`);
   const badButtons = await page.$$eval("button", (buttons) => buttons
-    .map((button) => ({ id: button.id, text: button.textContent.trim(), state: button.dataset.state || "", disabled: button.disabled }))
-    .filter((button) => !button.state || (button.disabled && !["disabled", "pending"].includes(button.state))));
-  assert.deepEqual(badButtons, [], `${context}: every button needs coherent visual state`);
+    .map((button, index) => ({ index, id: button.id, text: button.textContent.trim(), title: button.title || "", state: button.dataset.state || "", disabled: button.disabled, busy: button.getAttribute("aria-busy") === "true" }))
+    .filter((button) => !button.state || (button.disabled && !["disabled", "pending"].includes(button.state)) || (!button.disabled && button.state === "disabled") || (button.disabled && button.state === "disabled" && !button.title) || button.text.includes("�") || button.title.includes("�")));
+  assert.deepEqual(badButtons, [], `${context}: every button needs coherent visual state, readable reason, and clean glyphs`);
+  const rawLeaks = await page.$$eval("button,[title],#commandStatus", (nodes, rawCommands) => nodes
+    .map((node) => ({ id: node.id || node.tagName, text: node.textContent?.trim() || "", title: node.title || "" }))
+    .filter((item) => rawCommands.some((command) => item.text.includes(command) || item.title.includes(command))), commandIds);
+  assert.deepEqual(rawLeaks, [], `${context}: raw command ids must not leak into visible text or titles`);
+}
+
+async function auditAllButtons(page, label, options = {}) {
+  const buttons = await page.$$eval("button", (nodes) => nodes.map((button, index) => ({
+    index,
+    id: button.id,
+    text: button.textContent.trim(),
+    title: button.title || "",
+    disabled: button.disabled,
+    state: button.dataset.state || "",
+    actionId: button.dataset.actionId || "",
+    busy: button.getAttribute("aria-busy") === "true"
+  })));
+  assert.equal(buttons.length, 63, `${label}: expected to audit all 63 buttons`);
+  for (const button of buttons) {
+    assert(button.state, `${label}: ${button.id || button.text} missing data-state`);
+    if (button.disabled && button.state === "disabled") {
+      assert(button.title, `${label}: disabled ${button.id || button.text} needs a user-readable reason`);
+    }
+    assert(!button.text.includes("�") && !button.title.includes("�"), `${label}: malformed glyph on ${button.id || button.text}`);
+  }
+  if (options.probeDisabled) {
+    for (const button of buttons.filter((item) => item.disabled)) {
+      const before = await page.evaluate(() => window.__postedCommands.length);
+      await page.evaluate((index) => document.querySelectorAll("button")[index].click(), button.index);
+      await page.waitForTimeout(25);
+      const after = await page.evaluate(() => window.__postedCommands.length);
+      assert.equal(after, before, `${label}: disabled ${button.id || button.text} still posted a backend command`);
+      await assertHealthy(page, `${label}:disabled:${button.id || button.text}`);
+    }
+  }
+  return { total: buttons.length, disabledAudited: buttons.filter((button) => button.disabled).length };
+}
+
+async function assertBridgeButtonsDisabled(page, label) {
+  const states = await page.$$eval("button", (nodes, ids) => Object.fromEntries(nodes
+    .filter((button) => ids.includes(button.id))
+    .map((button) => [button.id, { disabled: button.disabled, state: button.dataset.state || "", title: button.title || "" }])), bridgeButtonIds);
+  for (const id of bridgeButtonIds) {
+    assert(states[id], `${label}: missing bridge action button ${id}`);
+    assert(states[id].disabled, `${label}: ${id} must be disabled while bridge is offline`);
+    assert(states[id].title, `${label}: ${id} needs an offline reason`);
+  }
+}
+
+async function assertDisabledButtonsDoNotLookLive(page, label) {
+  const liveLooking = await page.$$eval("button.primary:disabled,button.danger:disabled", (buttons) => buttons
+    .map((button) => {
+      const style = getComputedStyle(button);
+      return { id: button.id, text: button.textContent.trim(), color: style.color, background: style.backgroundColor, transition: style.transitionProperty };
+    })
+    .filter((button) => button.background === "rgb(4, 4, 4)" || button.background === "rgb(255, 75, 31)" || button.color === "rgb(255, 255, 255)"));
+  assert.deepEqual(liveLooking, [], `${label}: disabled primary/danger buttons must not retain live colors`);
 }
 
 async function sendState(page, statePatch = {}) {
@@ -186,23 +288,21 @@ async function sendState(page, statePatch = {}) {
 }
 
 async function clickAllEnabled(page, label) {
+  const auditBefore = await auditAllButtons(page, label, { probeDisabled: true });
   const total = await page.locator("button").count();
   let clicked = 0;
-  let skipped = 0;
   for (let i = 0; i < total; i += 1) {
     const button = page.locator("button").nth(i);
     const meta = await button.evaluate((node) => ({ disabled: node.disabled, id: node.id, text: node.textContent.trim() }));
-    if (meta.disabled) {
-      skipped += 1;
-      continue;
-    }
+    if (meta.disabled) continue;
     await button.scrollIntoViewIfNeeded();
     await button.click();
     clicked += 1;
     await page.waitForTimeout(70);
     await assertHealthy(page, `${label}:${meta.id || meta.text || i}`);
   }
-  return { total, clicked, skipped };
+  const auditAfter = await auditAllButtons(page, `${label}:after`, { probeDisabled: true });
+  return { total, clicked, disabledAuditedBefore: auditBefore.disabledAudited, disabledAuditedAfter: auditAfter.disabledAudited };
 }
 
 async function dragPreviewLine(page, from, to) {
@@ -227,6 +327,11 @@ async function clickPreviewPoint(page, point) {
 }
 
 async function exerciseDrawingStates(page) {
+  await auditAllButtons(page, "preview missing", { probeDisabled: true });
+  assert.equal(await page.locator("#cropDraw").evaluate((node) => node.disabled), true, "crop draw should stay disabled before preview refresh");
+  assert.equal(await page.locator("#floorMarkStart").evaluate((node) => node.disabled), true, "plank drawing should stay disabled before preview refresh");
+  assert.equal(await page.locator("#floorWallStart").evaluate((node) => node.disabled), true, "wall drawing should stay disabled before preview refresh");
+
   await page.locator("#refreshPreview").click();
   await page.waitForTimeout(120);
   await assertHealthy(page, "refresh preview");
@@ -238,7 +343,9 @@ async function exerciseDrawingStates(page) {
 
   await page.locator("#floorMarkStart").click();
   await dragPreviewLine(page, [0.12, 0.70], [0.88, 0.65]);
+  assert.equal(await page.locator("#floorManualApply").evaluate((node) => node.disabled), true, "manual plank apply should stay disabled after one line");
   await dragPreviewLine(page, [0.14, 0.82], [0.90, 0.77]);
+  assert.equal(await page.locator("#floorManualApply").evaluate((node) => node.disabled), true, "manual plank apply should stay disabled after two lines");
   await dragPreviewLine(page, [0.14, 0.70], [0.14, 0.82]);
   assert.equal(await page.locator("#floorManualApply").evaluate((node) => node.disabled), false, "manual plank apply should unlock after three drawn lines");
   await page.locator("#floorManualApply").click();
@@ -246,7 +353,9 @@ async function exerciseDrawingStates(page) {
   await assertHealthy(page, "manual plank apply");
 
   await page.locator("#floorWallStart").click();
-  for (const point of [[0.30, 0.25], [0.55, 0.25], [0.55, 0.52], [0.30, 0.52]]) await clickPreviewPoint(page, point);
+  for (const point of [[0.30, 0.25], [0.55, 0.25], [0.55, 0.52]]) await clickPreviewPoint(page, point);
+  assert.equal(await page.locator("#wallApplySelected").evaluate((node) => node.disabled), true, "wall sample solve should stay disabled before four corners");
+  await clickPreviewPoint(page, [0.30, 0.52]);
   assert.equal(await page.locator("#wallApplySelected").evaluate((node) => node.disabled), false, "wall sample solve should unlock after four corners");
   await page.locator("#wallApplySelected").click();
   await page.waitForTimeout(120);
@@ -255,6 +364,15 @@ async function exerciseDrawingStates(page) {
 
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ executablePath: browserPath(), headless: true });
+const offlineBootPage = await browser.newPage({ viewport: { width: 1440, height: 1800 } });
+await offlineBootPage.goto(uiUrl, { waitUntil: "load" });
+await offlineBootPage.waitForTimeout(80);
+assert.match(await offlineBootPage.locator("#commandStatus").textContent(), /bridge is unavailable/i, "offline boot must not report READY");
+await assertBridgeButtonsDisabled(offlineBootPage, "offline boot");
+await assertDisabledButtonsDoNotLookLive(offlineBootPage, "offline boot");
+await assertHealthy(offlineBootPage, "offline boot");
+await offlineBootPage.close();
+
 const page = await browser.newPage({ viewport: { width: 1440, height: 1800 } });
 await installBridge(page);
 await page.goto(uiUrl, { waitUntil: "load" });
@@ -275,6 +393,31 @@ results.push(["phone", await clickAllEnabled(page, "phone")]);
 await sendState(page, { steamvr_alignment: steamVrState({ active: true, accepted: ["left_foot", "right_foot", "pelvis", "floor"], solved: false }) });
 await assertHealthy(page, "steamvr ready render");
 results.push(["steamvr", await clickAllEnabled(page, "steamvr")]);
+
+await sendState(page, { steamvr_alignment: steamVrState({ active: true, accepted: [], solved: false }) });
+await assertHealthy(page, "steamvr active no samples render");
+results.push(["steamvr_active_no_samples", await clickAllEnabled(page, "steamvr_active_no_samples")]);
+
+await sendState(page, {
+  config: { tracking: { steamvr_tracker_bridge: { send_chest: false, send_elbows: false, send_knees: false }, osc: { trackers: { chest: 0, left_elbow: 0, right_elbow: 0, left_knee: 0, right_knee: 0 } } } },
+  steamvr_alignment: steamVrState({ active: true, accepted: ["left_foot"], solved: false })
+});
+await assertHealthy(page, "steamvr optional disabled render");
+results.push(["steamvr_optional_disabled", await clickAllEnabled(page, "steamvr_optional_disabled")]);
+
+await sendState(page, { steamvr_alignment: { provider: { status: "ready", reason: "mock waiting for controllers", left_controller_tracked: false, right_controller_tracked: false }, session: { active: true }, samples: [], solve: { valid: false, status: "pending", required_samples_present: 0, required_samples_complete: false }, transform: { valid: false } } });
+await assertHealthy(page, "steamvr controller missing render");
+results.push(["steamvr_controller_missing", await clickAllEnabled(page, "steamvr_controller_missing")]);
+
+await sendState(page);
+await page.evaluate(() => window.__setBridgeOnline(false));
+await page.waitForTimeout(80);
+await assertBridgeButtonsDisabled(page, "bridge offline");
+await assertDisabledButtonsDoNotLookLive(page, "bridge offline");
+await auditAllButtons(page, "bridge offline", { probeDisabled: true });
+await assertHealthy(page, "bridge offline render");
+await page.evaluate(() => window.__setBridgeOnline(true));
+await page.waitForTimeout(80);
 
 await sendState(page);
 await exerciseDrawingStates(page);

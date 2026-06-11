@@ -154,9 +154,98 @@ function commandLabel(command) {
   return commandLabels[command] || titleCaseCommand(command);
 }
 
-function commandProgressText(command) {
-  return `${commandLabel(command)}...`;
+const actionIntents = Object.create(null);
+
+function registerActionIntent(id, definition = {}) {
+  if (!id) return null;
+  const currentIntent = actionIntents[id] || {};
+  const command = definition.command || currentIntent.command || id;
+  const label = definition.label || currentIntent.label || commandLabel(command);
+  const intent = Object.assign({}, currentIntent, definition, {
+    id,
+    command,
+    label,
+    pendingLabel: definition.pendingLabel || currentIntent.pendingLabel || `${label}...`,
+    successLabel: definition.successLabel || currentIntent.successLabel || `${label}: ok`,
+    unavailableLabel: definition.unavailableLabel || currentIntent.unavailableLabel || `${label} needs the desktop backend bridge`
+  });
+  actionIntents[id] = intent;
+  return intent;
 }
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function humanizeCommandText(value) {
+  let text = String(value ?? "");
+  for (const [command, label] of Object.entries(commandLabels)) {
+    text = text.replace(new RegExp(`\b${escapeRegex(command)}\b`, "g"), label);
+  }
+  text = text.replace(/command circuit breaker open/gi, "backend command channel is temporarily paused");
+  text = text.replace(/bridge unavailable/gi, "backend bridge is unavailable");
+  return text;
+}
+
+function actionIntentFor(actionId, command = null) {
+  if (actionId && actionIntents[actionId]) return actionIntents[actionId];
+  const match = Object.values(actionIntents).find((intent) => intent.command === command);
+  if (match) return match;
+  if (command) return { id: actionId || command, command, label: commandLabel(command), pendingLabel: `${commandLabel(command)}...` };
+  return null;
+}
+
+function actionIntentForButton(button, command = null, options = {}) {
+  return actionIntentFor(options.actionId || button?.dataset?.actionId || button?.id, command);
+}
+
+function actionLabel(command, actionId = null) {
+  return actionIntentFor(actionId, command)?.label || commandLabel(command);
+}
+
+function actionProgressText(command, actionId = null) {
+  return `${actionLabel(command, actionId)}...`;
+}
+
+function buttonActionLabel(value) {
+  if (actionIntents[value]) return actionIntents[value].label;
+  return commandLabels[value] || String(value || "Working");
+}
+
+const staticActionIntents = {
+  scanCams: { command: "scanCameras", label: "Scan cameras" },
+  phoneSiteEnable: { command: "enablePhoneWebCamera", label: "Enable phone site" },
+  phoneSiteOpen: { command: "openPhoneWebCamera", label: "Open phone site" },
+  phoneSiteDisable: { command: "disablePhoneWebCamera", label: "Disable phone site" },
+  openModels: { command: "openModelsFolder", label: "Open models folder" },
+  openCalib: { command: "openCalibrationFolder", label: "Open calibration folder" },
+  createCalib: { command: "createCalibrationTemplate", label: "Create calibration template" },
+  openBuild: { command: "openBuildFolder", label: "Open build folder" },
+  prepDeploy: { command: "prepareDeployFolder", label: "Prepare deploy folder" },
+  rescanModel: { command: "rescanModel", label: "Rescan model" },
+  applyInferenceDevice: { command: "saveConfig", label: "Apply inference device", pendingLabel: "Applying inference device..." },
+  startRuntime: { command: "startRuntime", label: "Start runtime" },
+  stopRuntime: { command: "stopRuntime", label: "Stop runtime" },
+  saveConfig: { command: "saveConfig", label: "Save config" },
+  saveAdvanced: { command: "saveConfig", label: "Save advanced config" },
+  refreshPreview: { command: "refreshCameraPreview", label: "Refresh preview" },
+  floorManualApply: { command: "calibrateFloorGeometryBackend", label: "Apply drawn plank" },
+  wallApplySelected: { command: "calibrateFloorGeometryBackend", label: "Solve wall sample" },
+  steamVrAlignStart: { command: "steamVrAlignmentStart", label: "Start SteamVR calibration" },
+  steamVrAlignFinish: { command: "steamVrAlignmentFinish", label: "Solve SteamVR alignment" },
+  steamVrAlignClear: { command: "steamVrAlignmentClear", label: "Clear SteamVR alignment" },
+  steamVrAlignLeftFoot: { command: "steamVrAlignmentRecord", label: "Record left ankle sample" },
+  steamVrAlignRightFoot: { command: "steamVrAlignmentRecord", label: "Record right ankle sample" },
+  steamVrAlignPelvis: { command: "steamVrAlignmentRecord", label: "Record pelvis sample" },
+  steamVrAlignFloor: { command: "steamVrAlignmentRecord", label: "Record floor sample" },
+  steamVrAlignForward: { command: "steamVrAlignmentRecord", label: "Record forward sample" },
+  steamVrAlignChest: { command: "steamVrAlignmentRecord", label: "Record chest sample" },
+  steamVrAlignLeftElbow: { command: "steamVrAlignmentRecord", label: "Record left elbow sample" },
+  steamVrAlignRightElbow: { command: "steamVrAlignmentRecord", label: "Record right elbow sample" },
+  steamVrAlignLeftKnee: { command: "steamVrAlignmentRecord", label: "Record left knee sample" },
+  steamVrAlignRightKnee: { command: "steamVrAlignmentRecord", label: "Record right knee sample" }
+};
+Object.entries(staticActionIntents).forEach(([id, definition]) => registerActionIntent(id, definition));
 
 class CommandBus {
   constructor(options = {}) {
@@ -176,22 +265,32 @@ class CommandBus {
 
   pendingSnapshot() {
     const out = {};
-    for (const [id, entry] of this.pending.entries()) out[id] = { command: entry.command, retries: entry.envelope.retries };
+    for (const [id, entry] of this.pending.entries()) {
+      out[id] = {
+        command: entry.command,
+        retries: entry.envelope.retries,
+        actionId: entry.envelope.actionId || null,
+        actionLabel: entry.envelope.actionLabel || commandLabel(entry.command)
+      };
+    }
     return out;
   }
 
   notifyPending() { this.onPendingChange(this.pendingSnapshot()); }
 
   send(command, payload = {}, options = {}) {
+    const actionId = options.actionId || options.button?.dataset?.actionId || null;
+    const label = options.actionLabel || actionLabel(command, actionId);
     if (!this.available()) {
       this.onBridge("FAILED", false);
-      this.onStatus(`Bridge unavailable for ${command}`, false);
-      return Promise.resolve({ ok: false, error: "bridge unavailable" });
+      this.onStatus(`${label} needs the desktop backend bridge`, false);
+      return Promise.resolve({ ok: false, error: "backend bridge unavailable", actionLabel: label });
     }
     if (this.circuitBreaker.state === "OPEN") {
       if (this.now() < this.circuitBreaker.nextAttempt) {
         this.onBridge("CIRCUIT OPEN", false);
-        return Promise.resolve({ ok: false, error: "command circuit breaker open" });
+        this.onStatus(`${label} paused: backend command channel is recovering after repeated failures`, "warn");
+        return Promise.resolve({ ok: false, error: "backend command channel is temporarily paused", actionLabel: label });
       }
       this.circuitBreaker.state = "HALF_OPEN";
     }
@@ -202,10 +301,11 @@ class CommandBus {
     const envelope = {
       id: this.nextId++, command, payload, retries: 0, maxRetries, timeoutMs,
       createdAt: this.now(), deadline: this.now() + timeoutMs,
-      silentReply: !!options.silentReply, button: options.button || null
+      silentReply: !!options.silentReply, button: options.button || null,
+      actionId, actionLabel: label
     };
 
-    this.onStatus(commandProgressText(command));
+    this.onStatus(actionProgressText(command, actionId));
     return new Promise((resolve, reject) => {
       this.pending.set(envelope.id, { command, resolve, reject, envelope, timeout: null });
       this.notifyPending();
@@ -232,7 +332,7 @@ class CommandBus {
     if (envelope.retries < envelope.maxRetries) {
       envelope.retries += 1;
       const delay = Math.min(this.retryConfig.maxDelayMs, this.retryConfig.baseDelayMs * Math.pow(this.retryConfig.backoffMultiplier, envelope.retries - 1));
-      this.onStatus(`${envelope.command} timed out; retry ${envelope.retries}/${envelope.maxRetries}`, "warn");
+      this.onStatus(`${envelope.actionLabel || commandLabel(envelope.command)} timed out; retry ${envelope.retries}/${envelope.maxRetries}`, "warn");
       window.setTimeout(() => this.execute(envelope), delay);
       this.notifyPending();
       return;
@@ -252,7 +352,7 @@ class CommandBus {
       this.circuitBreaker.nextAttempt = this.now() + this.circuitBreaker.timeoutMs;
     }
     this.onBridge(errorText.includes("timeout") ? "TIMEOUT" : "ERROR", false);
-    this.onStatus(`${commandLabel(entry.command)}: ${errorText}`, false);
+    this.onStatus(`${entry.envelope?.actionLabel || commandLabel(entry.command)}: ${humanizeCommandText(errorText)}`, false);
     entry.resolve({ ok: false, error: errorText });
     this.notifyPending();
   }
@@ -480,7 +580,7 @@ function flashNode(node, className) {
 
 function setButtonBusy(button, label = "Working") {
   if (!button) return;
-  label = commandLabel(label);
+  label = buttonActionLabel(label);
   window.clearTimeout(transientTimers.get(button));
   button.dataset.busy = "true";
   button.dataset.feedback = "busy";
@@ -493,6 +593,7 @@ function setButtonBusy(button, label = "Working") {
 
 function setButtonResult(button, ok, text = "done") {
   if (!button) return;
+  text = humanizeCommandText(text);
   const base = baseButtonLabel(button);
   button.dataset.busy = "false";
   button.dataset.feedback = ok ? "ok" : "fail";
@@ -504,7 +605,9 @@ function setButtonResult(button, ok, text = "done") {
   const timer = window.setTimeout(() => {
     button.dataset.feedback = "";
     button.textContent = base;
-    button.title = "";
+    button.title = button.dataset.actionReason || "";
+    updateActionPresentation();
+    renderSteamVrAlignment();
   }, ok ? 900 : 1500);
   transientTimers.set(button, timer);
 }
@@ -567,6 +670,7 @@ function appendLog(message) {
 
 function setCommandStatus(message, ok = true) {
   if (!el.commandStatus) return;
+  message = humanizeCommandText(message);
   const state = ok === "warn" ? "warn" : (ok ? "ok" : "fail");
   el.commandStatus.textContent = message;
   el.commandStatus.className = `command-status ${state}`;
@@ -727,7 +831,10 @@ function updateWallRectangleStatus() {
       }
     }
   }
-  if (!el.wallRectStatus) return;
+  if (!el.wallRectStatus) {
+    updateActionPresentation();
+    return;
+  }
   const slot = currentWallRectangle();
   const done = slot.corners.length >= 4;
   const solved = !!slot.geometry?.valid;
@@ -741,6 +848,7 @@ function updateWallRectangleStatus() {
   const state = done ? (solved ? (capability || "candidate") : "ready to solve") : `${slot.corners.length}/4 corners`;
   const stateClass = solved ? "good" : (done ? "warn" : "muted");
   el.wallRectStatus.innerHTML = `${esc(activeFloorCameraLabel())} ${esc(wallSlotLabel())}: <b class="${stateClass}">${esc(state)}</b>${dims} <span class="wall-bank">A ${esc(wallCandidateSummary("camera_a"))} · B ${esc(wallCandidateSummary("camera_b"))}</span>`;
+  updateActionPresentation();
 }
 function controlLabel(node) {
   if (!node) return "control";
@@ -950,8 +1058,10 @@ function setActionControl(buttonOrId, options = {}) {
   if (!locallyBusy && !hasTransientFeedback) {
     button.textContent = label || baseButtonLabel(button);
     button.title = reason || "";
+    button.dataset.actionReason = reason || "";
   } else if (reason && !locallyBusy) {
     button.title = reason;
+    button.dataset.actionReason = reason;
   }
 }
 
@@ -974,9 +1084,10 @@ function anyWallSlotHasData() {
 
 function setBridgeAction(id, command, options = {}) {
   const bridgeReady = webviewAvailable();
+  const intent = registerActionIntent(id, { command, label: options.label || actionLabel(command, id) });
   const reason = !bridgeReady
-    ? "Backend bridge is unavailable"
-    : (options.reason || commandLabel(command));
+    ? intent.unavailableLabel
+    : (options.reason || intent.label);
   setActionControl(el[id], Object.assign({}, options, {
     enabled: bridgeReady && options.enabled !== false,
     pending: commandPending(command),
@@ -1387,7 +1498,7 @@ async function recordSteamVrWizardLandmark(landmark, controller, button) {
   const key = canonicalSteamVrLandmarkKey(landmark);
   const stepIndex = stepIndexForSteamVrLandmark(key);
   if (stepIndex >= 0) updateWizardPrompt(stepIndex);
-  const reply = await sendCommand("steamVrAlignmentRecord", { landmark: key, controller }, button);
+  const reply = await sendCommand("steamVrAlignmentRecord", { landmark: key, controller }, button, { actionId: button?.dataset?.actionId || steamVrLandmarkButtons[key] });
   if (commandOk(reply)) advanceWizardAfterSample(key);
   else advanceWizardAfterSampleFailure(key, reply);
   return reply;
@@ -1414,6 +1525,7 @@ function maybeRecordSteamVrTrigger(provider, session) {
 }
 
 function renderSteamVrAlignmentButtons(provider, session, acceptedKeys, samplesByKey, requiredMet) {
+  const bridgeReady = webviewAvailable();
   const providerStructural = steamVrProviderStructurallyUnavailable(provider);
   const sessionActive = !!session.active;
   const startPending = commandPending("steamVrAlignmentStart");
@@ -1426,18 +1538,20 @@ function renderSteamVrAlignmentButtons(provider, session, acceptedKeys, samplesB
   const acceptedCount = acceptedKeys.size;
 
   setActionControl(el.steamVrAlignStart, {
-    enabled: !sessionActive && providerRecoverable && !busy,
+    enabled: bridgeReady && !sessionActive && providerRecoverable && !busy,
     pending: startPending,
-    active: !sessionActive && providerRecoverable,
+    active: bridgeReady && !sessionActive && providerRecoverable,
     done: sessionActive,
-    reason: sessionActive
-      ? "Calibration session is already active"
-      : (providerStructural ? (provider.reason || "SteamVR provider is unavailable in this build") : "Begin a SteamVR controller alignment session"),
+    reason: !bridgeReady
+      ? actionIntents.steamVrAlignStart.unavailableLabel
+      : (sessionActive
+        ? "Calibration session is already active"
+        : (providerStructural ? (provider.reason || "SteamVR provider is unavailable in this build") : "Begin a SteamVR controller alignment session")),
     label: sessionActive ? "Session active" : null
   });
 
   const firstMissingRequired = firstMissingRequiredSteamVrLandmark(acceptedKeys);
-  const canRecord = sessionActive && !recordPending && !finishPending && !startPending && providerRecoverable && controllerReady;
+  const canRecord = bridgeReady && sessionActive && !recordPending && !finishPending && !startPending && providerRecoverable && controllerReady;
   for (const item of steamVrAlignmentLandmarks) {
     const done = acceptedKeys.has(item.key);
     const keySamples = samplesByKey.get(item.key) || [];
@@ -1447,17 +1561,19 @@ function renderSteamVrAlignmentButtons(provider, session, acceptedKeys, samplesB
     const active = promptedLandmark
       ? promptedLandmark === item.key
       : (!!firstMissingRequired && firstMissingRequired.key === item.key);
-    const reason = !sessionActive
-      ? "Start calibration first"
-      : (!providerRecoverable
-        ? (provider.reason || "SteamVR provider is unavailable")
-        : (!controllerReady
-          ? "Waiting for a tracked SteamVR controller"
-          : (!enabledByConfig
-            ? "This optional tracker role is disabled: enable SteamVR trackers or map this legacy OSC role"
-            : (done
-              ? "Sample accepted; click again to replace it"
-              : item.detail))));
+    const reason = !bridgeReady
+      ? actionIntents[item.buttonId].unavailableLabel
+      : (!sessionActive
+        ? "Start calibration first"
+        : (!providerRecoverable
+          ? (provider.reason || "SteamVR provider is unavailable")
+          : (!controllerReady
+            ? "Waiting for a tracked SteamVR controller"
+            : (!enabledByConfig
+              ? "This optional tracker role is disabled: enable SteamVR trackers or map this legacy OSC role"
+              : (done
+                ? "Sample accepted; click again to replace it"
+                : item.detail)))));
     setActionControl(item.buttonId, {
       enabled: canRecord && enabledByConfig,
       pending: recordPending && active,
@@ -1471,20 +1587,20 @@ function renderSteamVrAlignmentButtons(provider, session, acceptedKeys, samplesB
 
   const requiredMissing = Math.max(0, steamVrRequiredLandmarkKeys.length - steamVrRequiredAcceptedCount(acceptedKeys));
   setActionControl(el.steamVrAlignFinish, {
-    enabled: sessionActive && requiredMet && !busy,
+    enabled: bridgeReady && sessionActive && requiredMet && !busy,
     pending: finishPending,
-    active: sessionActive && requiredMet,
-    reason: requiredMet
+    active: bridgeReady && sessionActive && requiredMet,
+    reason: !bridgeReady ? actionIntents.steamVrAlignFinish.unavailableLabel : (requiredMet
       ? "Solve alignment and save it"
-      : `Need ${requiredMissing} more required sample(s) before solving`
+      : `Need ${requiredMissing} more required sample(s) before solving`)
   });
 
   const hasSomethingToClear = sessionActive || acceptedCount > 0 || !!(current.steamvr_alignment?.transform?.valid);
   setActionControl(el.steamVrAlignClear, {
-    enabled: hasSomethingToClear && !busy,
+    enabled: bridgeReady && hasSomethingToClear && !busy,
     pending: clearPending,
-    warn: hasSomethingToClear,
-    reason: hasSomethingToClear ? "Clear SteamVR alignment session and samples" : "No SteamVR alignment data to clear"
+    warn: bridgeReady && hasSomethingToClear,
+    reason: !bridgeReady ? actionIntents.steamVrAlignClear.unavailableLabel : (hasSomethingToClear ? "Clear SteamVR alignment session and samples" : "No SteamVR alignment data to clear")
   });
 }
 
@@ -2239,7 +2355,7 @@ async function applyManualFloorLines(sourceLabel = "Manual plank outline", optio
     horizontal_fov_deg: Number(el.monocularFov?.value || current.config?.tracking?.monocular?.horizontal_fov_deg || 0),
     floor_confidence: Number(el.floorConfidence?.value || 1)
   };
-  const reply = await sendCommand("calibrateFloorGeometryBackend", payload, null, { silentReply: true });
+  const reply = await sendCommand("calibrateFloorGeometryBackend", payload, null, { actionId: button?.id || "floorManualApply", silentReply: true });
   if (reply?.error === "already pending") {
     setButtonResult(button, false, "calibration already pending");
     return false;
@@ -2311,7 +2427,7 @@ async function applyManualWallRectangle(sourceLabel = "Wall sample") {
     wall_aspect_ratio: Number.isFinite(wallAspect) && wallAspect > 0 ? wallAspect : 0,
     horizontal_fov_deg: Number(el.monocularFov?.value || current.config?.tracking?.monocular?.horizontal_fov_deg || 0)
   };
-  const reply = await sendCommand("calibrateFloorGeometryBackend", payload, null, { silentReply: true });
+  const reply = await sendCommand("calibrateFloorGeometryBackend", payload, el.wallApplySelected, { actionId: "wallApplySelected", silentReply: true });
   const result = reply?.result || reply || {};
   const ok = !!result.ok || !!result.wall_geometry?.valid;
   slot.geometry = result.wall_geometry || null;
@@ -2339,7 +2455,7 @@ async function saveVisibleConfig(sourceLabel = "Manual plank refresh before save
   if (!refreshed) {
     setCommandStatus(`${sourceLabel}: draft plank refresh failed; saving last committed config`, false);
   }
-  return sendCommand("saveConfig", readPayload());
+  return sendCommand("saveConfig", readPayload(), null, { actionId: "saveConfig" });
 }
 
 function handleFloorPreviewPointerDown(event) {
@@ -2406,10 +2522,8 @@ function handleFloorPreviewPointerDown(event) {
     updateFloorMarkOverlay();
     setCommandStatus(slot.corners.length < 4
       ? `${wallSlotLabel()} corner ${slot.corners.length}/4 captured`
-      : `${wallSlotLabel()} corners captured; backend solving scoped wall geometry`);
-    if (slot.corners.length >= 4) {
-      applyManualWallRectangle(wallSlotLabel());
-    }
+      : `${wallSlotLabel()} corners captured; click Solve sample to test this wall geometry`);
+    updateActionPresentation();
     event.preventDefault();
     return;
   }
@@ -2774,12 +2888,16 @@ function webviewAvailable() {
 }
 
 function sendCommand(command, payload = {}, button = null, options = {}) {
+  const intent = actionIntentForButton(button, command, options);
   if (buttonIsBusy(button)) {
-    return Promise.resolve({ ok: false, error: "already pending" });
+    return Promise.resolve({ ok: false, error: "already pending", actionLabel: intent?.label });
   }
-  if (button) setButtonBusy(button, command);
+  if (button && intent?.id) button.dataset.actionId = intent.id;
+  if (button) setButtonBusy(button, options.pendingLabel || intent?.pendingLabel || command);
   return commandBus.send(command, payload, {
     button,
+    actionId: intent?.id || options.actionId || null,
+    actionLabel: intent?.label || options.actionLabel || commandLabel(command),
     silentReply: !!options.silentReply,
     timeoutMs: options.timeoutMs,
     maxRetries: options.maxRetries,
@@ -2896,7 +3014,8 @@ function readPayload() {
 
 function render(state) {
   current = state || {};
-  setBridge("CONNECTED");
+  const bridgeReady = webviewAvailable();
+  setBridge(bridgeReady ? "CONNECTED" : "FAILED", bridgeReady);
 
   const modelOk = !!current.model?.exists;
   const running = !!current.runtime?.running;
@@ -2946,24 +3065,26 @@ function render(state) {
   const phoneOpenPending = commandPending("openPhoneWebCamera");
   const phoneDisablePending = commandPending("disablePhoneWebCamera");
   setActionControl(el.phoneSiteEnable, {
-    enabled: phoneSite.launcher_available !== false && phoneSiteStatusKey !== "enabled",
+    enabled: bridgeReady && phoneSite.launcher_available !== false && phoneSiteStatusKey !== "enabled",
     pending: phoneEnablePending,
     done: phoneSiteOn,
-    reason: phoneSiteOn
-      ? "Phone camera site is already enabled"
-      : (phoneSite.launcher_available === false ? "Phone camera launcher is unavailable" : "Enable the phone camera web site")
+    reason: !bridgeReady
+      ? actionIntents.phoneSiteEnable.unavailableLabel
+      : (phoneSiteOn
+        ? "Phone camera site is already enabled"
+        : (phoneSite.launcher_available === false ? "Phone camera launcher is unavailable" : "Enable the phone camera web site"))
   });
   setActionControl(el.phoneSiteOpen, {
-    enabled: !!phoneSiteUrl,
+    enabled: bridgeReady && !!phoneSiteUrl,
     pending: phoneOpenPending,
     active: !!phoneSiteUrl && !phoneSiteOn,
-    reason: phoneSiteUrl ? "Open the phone camera web site" : "Enable the phone camera site first"
+    reason: !bridgeReady ? actionIntents.phoneSiteOpen.unavailableLabel : (phoneSiteUrl ? "Open the phone camera web site" : "Enable the phone camera site first")
   });
   setActionControl(el.phoneSiteDisable, {
-    enabled: phoneSite.stop_available !== false && phoneSiteStatusKey !== "disabled" && !phoneDisablePending,
+    enabled: bridgeReady && phoneSite.stop_available !== false && phoneSiteStatusKey !== "disabled" && !phoneDisablePending,
     pending: phoneDisablePending,
     warn: phoneSiteOn,
-    reason: phoneSiteStatusKey === "disabled" ? "Phone camera site is already disabled" : "Stop the phone camera web site"
+    reason: !bridgeReady ? actionIntents.phoneSiteDisable.unavailableLabel : (phoneSiteStatusKey === "disabled" ? "Phone camera site is already disabled" : "Stop the phone camera web site")
   });
 
   if (syncInputs) {
@@ -3141,7 +3262,7 @@ function render(state) {
   el.modeA.textContent = modeText(camA);
   el.modeB.textContent = monocularMode ? "disabled in monocular mode" : modeText(camB);
   el.cameraStatus.textContent = current.cameras?.scanning ? "scanning cameras..." : (current.cameras?.status || "camera scan ready");
-  const cameraSetPending = commandPending("saveConfig", "scanCameras", "startRuntime");
+  const cameraSetPending = !bridgeReady || commandPending("saveConfig", "scanCameras", "startRuntime");
   el.cameraRows.innerHTML = items.map((camera) => {
     const isA = Number(el.cameraA.value) === camera.index;
     const isB = Number(el.cameraB.value) === camera.index;
@@ -3153,8 +3274,8 @@ function render(state) {
     const disableA = cameraSetPending || !camera.opened || isA;
     const disableB = cameraSetPending || monocularMode || !camera.opened || isB;
     const rowClass = `${isA ? "selected-a" : ""} ${(!monocularMode && isB) ? "selected-b" : ""}`.trim();
-    const titleA = !camera.opened ? "Camera has no signal" : (isA ? "Camera is already assigned to A" : "Assign this camera to A");
-    const titleB = monocularMode ? "Camera B is disabled in monocular mode" : (!camera.opened ? "Camera has no signal" : (isB ? "Camera is already assigned to B" : "Assign this camera to B"));
+    const titleA = !bridgeReady ? "Camera assignment needs the desktop backend bridge" : (!camera.opened ? "Camera has no signal" : (isA ? "Camera is already assigned to A" : "Assign this camera to A"));
+    const titleB = !bridgeReady ? "Camera assignment needs the desktop backend bridge" : (monocularMode ? "Camera B is disabled in monocular mode" : (!camera.opened ? "Camera has no signal" : (isB ? "Camera is already assigned to B" : "Assign this camera to B")));
     return `<div class="row ${esc(rowClass)}"><span>${camera.index}</span><span class="pill"><i class="dot ${camera.opened ? "on" : ""}"></i>${camera.opened ? "OPEN" : "NO SIGNAL"}</span><span>${preview}</span><span>${esc((camera.backend || "--").toUpperCase())}</span><span>${camera.opened ? `${camera.width}x${camera.height} @ ${fmt(camera.fps, 1)}` : "--"}</span><span>${esc(assignment)}</span><button class="${isA ? "is-done" : ""}" ${disableA ? "disabled" : ""} title="${esc(titleA)}" data-a="${camera.index}" type="button">${isA ? "A active" : "Use A"}</button><button class="${(!monocularMode && isB) ? "is-done" : ""}" ${disableB ? "disabled" : ""} title="${esc(titleB)}" data-b="${camera.index}" type="button">${(!monocularMode && isB) ? "B active" : "Use B"}</button></div>`;
   }).join("");
 
@@ -3237,39 +3358,41 @@ function render(state) {
   // real model-load error after the save.
   const runtimeStartBlocked = !modelOk && !localDraftDirty;
   setActionControl(el.startRuntime, {
-    enabled: !running && !runtimeStartBlocked && !runtimeStopPending,
+    enabled: bridgeReady && !running && !runtimeStartBlocked && !runtimeStopPending,
     pending: runtimeStartPending,
-    active: !running && !runtimeStartBlocked,
+    active: bridgeReady && !running && !runtimeStartBlocked,
     done: running,
-    reason: running
-      ? "Runtime is already running"
-      : (runtimeStartBlocked ? "Model asset is missing" : (setupOk ? "Save visible config, then start runtime" : "Start runtime; stereo calibration is not ready yet")),
+    reason: !bridgeReady
+      ? actionIntents.startRuntime.unavailableLabel
+      : (running
+        ? "Runtime is already running"
+        : (runtimeStartBlocked ? "Model asset is missing" : (setupOk ? "Save visible config, then start runtime" : "Start runtime; stereo calibration is not ready yet"))),
     label: running ? "Runtime running" : "Start"
   });
   setActionControl(el.stopRuntime, {
-    enabled: running && !runtimeStartPending,
+    enabled: bridgeReady && running && !runtimeStartPending,
     pending: runtimeStopPending,
     active: running,
-    reason: running ? "Stop runtime" : "Runtime is already stopped"
+    reason: !bridgeReady ? actionIntents.stopRuntime.unavailableLabel : (running ? "Stop runtime" : "Runtime is already stopped")
   });
   setActionControl(el.scanCams, {
-    enabled: !commandPending("scanCameras") && !running,
+    enabled: bridgeReady && !commandPending("scanCameras") && !running,
     pending: commandPending("scanCameras"),
-    reason: running ? "Stop runtime before rescanning cameras" : "Scan cameras"
+    reason: !bridgeReady ? actionIntents.scanCams.unavailableLabel : (running ? "Stop runtime before rescanning cameras" : "Scan cameras")
   });
   setActionControl(el.saveConfig, {
-    enabled: !commandPending("saveConfig"),
+    enabled: bridgeReady && !commandPending("saveConfig"),
     pending: commandPending("saveConfig"),
-    active: localDraftDirty,
-    done: !localDraftDirty,
-    reason: localDraftDirty ? "Save modified visible configuration" : "Visible configuration matches backend state"
+    active: bridgeReady && localDraftDirty,
+    done: bridgeReady && !localDraftDirty,
+    reason: !bridgeReady ? actionIntents.saveConfig.unavailableLabel : (localDraftDirty ? "Save modified visible configuration" : "Visible configuration matches backend state")
   });
   setActionControl(el.saveAdvanced, {
-    enabled: !commandPending("saveConfig"),
+    enabled: bridgeReady && !commandPending("saveConfig"),
     pending: commandPending("saveConfig"),
-    active: localDraftDirty,
-    done: !localDraftDirty,
-    reason: localDraftDirty ? "Save modified advanced configuration" : "Advanced configuration matches backend state"
+    active: bridgeReady && localDraftDirty,
+    done: bridgeReady && !localDraftDirty,
+    reason: !bridgeReady ? actionIntents.saveAdvanced.unavailableLabel : (localDraftDirty ? "Save modified advanced configuration" : "Advanced configuration matches backend state")
   });
   renderPet(current);
   updateActionPresentation();
@@ -3295,9 +3418,9 @@ function handleReply(message) {
   const { entry, result, ok } = handled;
   const envelope = entry.envelope || {};
   const statusClass = result.status_class || (ok ? "ok" : "failed_fatal");
-  const text = ok
-    ? `${commandLabel(entry.command)}: ${result.warning || result.status || statusClass || "ok"}`
-    : `${commandLabel(entry.command)}: ${message.error || result.status || statusClass || "failed"}`;
+  const replyLabel = envelope.actionLabel || actionLabel(entry.command, envelope.actionId);
+  const replyDetail = humanizeCommandText(result.warning || result.status || message.error || statusClass || (ok ? "ok" : "failed"));
+  const text = `${replyLabel}: ${replyDetail}`;
   const statusState = (statusClass === "warning" || statusClass === "degraded") ? "warn" : ok;
   setBridge(ok ? "CONNECTED" : "ERROR", ok);
   if (!envelope.silentReply) {
@@ -3331,13 +3454,19 @@ function handleMessage(event) {
   }
 }
 
-function bindClick(id, command, payload = () => ({})) {
+function bindAction(id, definition = {}) {
   const node = el[id];
   if (!node) {
     appendLog(`Missing UI node #${id}`);
     return;
   }
-  node.addEventListener("click", () => sendCommand(command, payload(), node));
+  const intent = registerActionIntent(id, definition);
+  node.dataset.actionId = intent.id;
+  node.addEventListener("click", () => sendCommand(intent.command, definition.payload?.() || {}, node, { actionId: intent.id }));
+}
+
+function bindClick(id, command, payload = () => ({})) {
+  bindAction(id, { command, payload });
 }
 
 function bindToggle(id) {
@@ -3356,6 +3485,9 @@ function bindToggle(id) {
 }
 
 function bindEvents() {
+  for (const [id, intent] of Object.entries(actionIntents)) {
+    if (el[id]) el[id].dataset.actionId = intent.id;
+  }
   el.petAction?.addEventListener("click", runPetAction);
   el.petBody?.addEventListener("click", (event) => {
     if (petDrag?.moved) return;
@@ -3415,25 +3547,25 @@ function bindEvents() {
     });
   }, true);
 
-  bindClick("scanCams", "scanCameras");
-  bindClick("phoneSiteEnable", "enablePhoneWebCamera");
-  bindClick("phoneSiteOpen", "openPhoneWebCamera");
-  bindClick("phoneSiteDisable", "disablePhoneWebCamera");
-  bindClick("openModels", "openModelsFolder");
-  bindClick("openCalib", "openCalibrationFolder");
-  bindClick("createCalib", "createCalibrationTemplate");
-  bindClick("openBuild", "openBuildFolder");
-  bindClick("prepDeploy", "prepareDeployFolder");
-  bindClick("rescanModel", "rescanModel");
+  bindAction("scanCams");
+  bindAction("phoneSiteEnable");
+  bindAction("phoneSiteOpen");
+  bindAction("phoneSiteDisable");
+  bindAction("openModels");
+  bindAction("openCalib");
+  bindAction("createCalib");
+  bindAction("openBuild");
+  bindAction("prepDeploy");
+  bindAction("rescanModel");
   el.startRuntime?.addEventListener("click", async () => {
     await withButtonFeedback(el.startRuntime, "startRuntime", async () => {
       setCommandStatus("Saving config before runtime start");
       const saved = await saveVisibleConfig("Manual plank refresh before runtime start");
       if (saved?.ok === false || saved?.result?.ok === false) return saved;
-      return sendCommand("startRuntime");
+      return sendCommand("startRuntime", {}, null, { actionId: "startRuntime" });
     });
   });
-  bindClick("stopRuntime", "stopRuntime");
+  bindAction("stopRuntime");
   el.saveConfig?.addEventListener("click", () => withButtonFeedback(el.saveConfig, "saveConfig", () => saveVisibleConfig("Manual plank refresh before save")));
   el.saveAdvanced?.addEventListener("click", () => withButtonFeedback(el.saveAdvanced, "saveConfig", () => saveVisibleConfig("Manual plank refresh before advanced save")));
 
@@ -3483,14 +3615,14 @@ function bindEvents() {
       markDraftDirty();
       setCommandStatus(`Camera A set to ${button.dataset.a} locally · sending backend update`);
       renderFloorAssist(trackingMode());
-      sendCommand("setCamera", { slot: "a", index: Number(button.dataset.a) }, button);
+      sendCommand("setCamera", { slot: "a", index: Number(button.dataset.a) }, button, { actionLabel: "Set Camera A" });
     }
     if (button.dataset.b !== undefined) {
       el.cameraB.value = button.dataset.b;
       markControlTouched(button);
       markDraftDirty();
       setCommandStatus(`Camera B set to ${button.dataset.b} locally · sending backend update`);
-      sendCommand("setCamera", { slot: "b", index: Number(button.dataset.b) }, button);
+      sendCommand("setCamera", { slot: "b", index: Number(button.dataset.b) }, button, { actionLabel: "Set Camera B" });
     }
   });
 
@@ -3513,26 +3645,26 @@ function bindEvents() {
     await withButtonFeedback(el.applyInferenceDevice, "applyInferenceDevice", async () => {
       const wasRunning = !!current.runtime?.running;
       setCommandStatus(wasRunning ? "Saving device and restarting runtime" : "Saving inference device");
-      const saved = await sendCommand("saveConfig", readPayload());
+      const saved = await sendCommand("saveConfig", readPayload(), null, { actionId: "applyInferenceDevice" });
       if (saved?.ok === false || saved?.result?.ok === false) return saved;
       if (wasRunning) {
-        const stopped = await sendCommand("stopRuntime");
+        const stopped = await sendCommand("stopRuntime", {}, null, { actionId: "stopRuntime" });
         if (stopped?.ok === false || stopped?.result?.ok === false) return stopped;
-        return sendCommand("startRuntime");
+        return sendCommand("startRuntime", {}, null, { actionId: "startRuntime" });
       }
-      return sendCommand("rescanModel");
+      return sendCommand("rescanModel", {}, null, { actionId: "rescanModel" });
     });
   });
   el.cameraA?.addEventListener("change", () => {
     markControlTouched(el.cameraA);
     setCommandStatus(`Camera A set to ${el.cameraA.value} locally · sending backend update`);
     renderFloorAssist(trackingMode());
-    sendCommand("setCamera", { slot: "a", index: Number(el.cameraA.value) });
+    sendCommand("setCamera", { slot: "a", index: Number(el.cameraA.value) }, null, { actionLabel: "Set Camera A" });
   });
   el.cameraB?.addEventListener("change", () => {
     markControlTouched(el.cameraB);
     setCommandStatus(`Camera B set to ${el.cameraB.value} locally · sending backend update`);
-    sendCommand("setCamera", { slot: "b", index: Number(el.cameraB.value) });
+    sendCommand("setCamera", { slot: "b", index: Number(el.cameraB.value) }, null, { actionLabel: "Set Camera B" });
   });
 
   el.floorCameraSlot?.addEventListener("change", () => {
@@ -3553,7 +3685,7 @@ function bindEvents() {
     if (buttonIsBusy(el.refreshPreview)) return;
     setButtonBusy(el.refreshPreview, "refresh preview");
     const cameraSlot = activeFloorCameraKey();
-    const reply = await sendCommand("refreshCameraPreview", { camera_a: cameraIndexForFloorSlot(cameraSlot), camera_slot: cameraSlot }, null, { silentReply: true });
+    const reply = await sendCommand("refreshCameraPreview", { camera_a: cameraIndexForFloorSlot(cameraSlot), camera_slot: cameraSlot }, null, { actionId: "refreshPreview", silentReply: true });
     const result = reply?.result || {};
     if (reply?.ok && result.preview) {
       const cameraIndex = Number(result.camera ?? el.cameraA?.value);
@@ -3702,7 +3834,7 @@ function bindEvents() {
 
 
   el.steamVrAlignStart?.addEventListener("click", async () => {
-    const reply = await sendCommand("steamVrAlignmentStart", {}, el.steamVrAlignStart);
+    const reply = await sendCommand("steamVrAlignmentStart", {}, el.steamVrAlignStart, { actionId: "steamVrAlignStart" });
     if (commandOk(reply)) {
       updateWizardPrompt(steamVrNextWizardStepForState({ active: true }, steamVrAcceptedSampleKeys(current.steamvr_alignment?.samples || [])));
     }
@@ -3722,11 +3854,11 @@ function bindEvents() {
     bindSteamVrSample(item.buttonId, item.key);
   }
   el.steamVrAlignFinish?.addEventListener("click", async () => {
-    const reply = await sendCommand("steamVrAlignmentFinish", {}, el.steamVrAlignFinish);
+    const reply = await sendCommand("steamVrAlignmentFinish", {}, el.steamVrAlignFinish, { actionId: "steamVrAlignFinish" });
     if (commandOk(reply)) updateWizardPrompt(solveWizardStepIndex());
   });
   el.steamVrAlignClear?.addEventListener("click", async () => {
-    const reply = await sendCommand("steamVrAlignmentClear", {}, el.steamVrAlignClear);
+    const reply = await sendCommand("steamVrAlignmentClear", {}, el.steamVrAlignClear, { actionId: "steamVrAlignClear" });
     if (commandOk(reply)) updateWizardPrompt(0);
   });
   el.trackerSpaceIdentity?.addEventListener("click", () => {
@@ -3771,14 +3903,14 @@ window.addEventListener("unhandledrejection", (event) => {
   setCommandStatus(`Unhandled promise rejection: ${event.reason}`, false);
 });
 
-if (webviewAvailable()) {
+const initialBridgeReady = webviewAvailable();
+if (initialBridgeReady) {
   webviewBridge.addMessageListener(handleMessage);
   setBridge("WAITING");
 } else {
   setBridge("FAILED", false);
-  setCommandStatus("WebView2 bridge unavailable", false);
 }
 
 bindEvents();
-setCommandStatus("READY");
-updateActionPresentation();
+render(current);
+setCommandStatus(initialBridgeReady ? "READY" : "WebView2 bridge unavailable", initialBridgeReady);

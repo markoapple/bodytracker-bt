@@ -53,6 +53,18 @@ button {
   transition: background .25s cubic-bezier(0.2, 0, 0, 1), color .25s cubic-bezier(0.2, 0, 0, 1), box-shadow .25s cubic-bezier(0.2, 0, 0, 1), transform .15s cubic-bezier(0.2, 0, 0, 1);
 }
 
+button:not(.pet-stage)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: transparent;
+  transition: width .2s cubic-bezier(0.2, 0, 0, 1), background .2s cubic-bezier(0.2, 0, 0, 1);
+  pointer-events: none;
+}
+
 button:not(.switch)::after {
   content: "";
   position: absolute;
@@ -86,6 +98,7 @@ button[data-touched="true"]:not(:disabled) {
 button[data-feedback="busy"] {
   cursor: progress;
   background: var(--soft);
+  box-shadow: inset 4px 0 0 0 var(--accent), inset 0 0 0 2px var(--line);
 }
 
 button[data-feedback="busy"]:not(.switch)::after,
@@ -121,7 +134,12 @@ button[data-feedback="fail"]:not(.switch)::after {
 button.is-active,
 button[data-state="active"] {
   border-color: var(--accent);
-  box-shadow: inset 0 -4px 0 0 var(--accent);
+  box-shadow: inset 4px 0 0 0 var(--accent), inset 0 -4px 0 0 var(--accent);
+}
+
+button[data-state="active"]:not(.pet-stage)::before {
+  width: 4px;
+  background: var(--accent);
 }
 
 button[data-state="active"]:not(.switch)::after {
@@ -131,13 +149,23 @@ button[data-state="active"]:not(.switch)::after {
 button.is-done,
 button[data-state="done"] {
   border-color: var(--good);
-  box-shadow: inset 0 -4px 0 0 var(--good);
+  box-shadow: inset 4px 0 0 0 var(--good), inset 0 -4px 0 0 var(--good);
+}
+
+button[data-state="done"]:not(.pet-stage)::before {
+  width: 4px;
+  background: var(--good);
 }
 
 button.is-warn,
 button[data-state="warn"] {
   border-color: var(--warn);
-  box-shadow: inset 0 -4px 0 0 var(--warn);
+  box-shadow: inset 4px 0 0 0 var(--warn), inset 0 -4px 0 0 var(--warn);
+}
+
+button[data-state="warn"]:not(.pet-stage)::before {
+  width: 4px;
+  background: var(--warn);
 }
 
 button[data-state="warn"]:not(.switch)::after {
@@ -147,14 +175,27 @@ button[data-state="warn"]:not(.switch)::after {
 button[data-state="pending"] {
   cursor: progress;
   background: var(--soft);
+  box-shadow: inset 4px 0 0 0 var(--accent), inset 0 0 0 2px var(--line);
+}
+
+button[data-state="pending"]:not(.pet-stage)::before {
+  width: 4px;
+  background: var(--accent);
 }
 
 button:disabled {
   color: var(--disabled);
   cursor: not-allowed;
-  background: rgba(255, 255, 255, .58);
+  background-color: rgba(255, 255, 255, .58);
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(4,4,4,.05) 6px 8px);
   border-color: var(--hair);
-  box-shadow: repeating-linear-gradient(135deg, transparent 0 6px, rgba(4,4,4,.05) 6px 8px);
+  box-shadow: inset 4px 0 0 0 rgba(4,4,4,.16);
+  transition: none;
+}
+
+button:disabled:not(.pet-stage)::before {
+  width: 4px;
+  background: rgba(4,4,4,.16);
 }
 
 button:disabled:not(.switch)::after {
@@ -350,6 +391,18 @@ body.draft-dirty .command-status {
   box-shadow: inset 0 -3px 0 0 var(--ink);
 }
 
+.primary:disabled,
+.danger:disabled,
+button.primary[disabled],
+button.danger[disabled] {
+  color: var(--disabled) !important;
+  background-color: rgba(255, 255, 255, .58) !important;
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(4,4,4,.05) 6px 8px) !important;
+  border-color: var(--hair) !important;
+  box-shadow: inset 4px 0 0 0 rgba(4,4,4,.16) !important;
+  transition: none !important;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -505,6 +558,24 @@ body.draft-dirty .command-status {
 
 .switch:not(:disabled):hover i {
   box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.switch:disabled {
+  background: rgba(255, 255, 255, .58);
+}
+
+.switch:disabled i,
+.switch:disabled[aria-pressed=true] b:first-child,
+.switch:disabled[aria-pressed=false] b:last-child {
+  background: var(--soft);
+  color: var(--disabled);
+  border-color: var(--hair);
+}
+
+.switch:disabled[aria-pressed=true] b:last-child,
+.switch:disabled[aria-pressed=false] b:first-child {
+  background: rgba(255,255,255,.52);
+  color: var(--disabled);
 }
 
 .telemetry {
@@ -682,7 +753,18 @@ body.draft-dirty .command-status {
   padding: 0 12px;
   font-size: 12px;
   font-weight: 800;
+  gap: 10px;
   transition: background .3s cubic-bezier(0.2, 0, 0, 1), border-color .3s cubic-bezier(0.2, 0, 0, 1), box-shadow .3s cubic-bezier(0.2, 0, 0, 1), color .3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.command-status::before {
+  content: attr(data-state);
+  min-width: 34px;
+  padding: 4px 6px;
+  border: 1px solid currentColor;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
 }
 
 .command-status.status-pulse {
