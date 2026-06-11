@@ -1,0 +1,124 @@
+index	source_commit	short	author_date	author_name	subject
+1	06817572f143cd096edfc4dea0e3782cdf4bed01	0681757	2026-05-01T05:49:20+02:00	Pands	Initial commit
+2	563202ef6622e28dc2cc09cc86990e96be323de1	563202e	2026-05-01T20:22:55+02:00	Pands	Fix OpenCV highgui build wiring
+3	aa3dfcdbb70b7b03ee3b6c399abe6a13e18cb08c	aa3dfcd	2026-05-01T20:25:44+02:00	Pands	Document vcpkg dependencies
+4	d5c116804151655372ebbad5995db787c536fd86	d5c1168	2026-05-01T20:26:09+02:00	Pands	Add Windows CI build and test workflow
+5	aa2a011098802dbb64ab057d6e8a213b25228945	aa2a011	2026-05-01T20:26:41+02:00	Pands	Clarify build status and runtime readiness
+6	eb0f16c873729acc7b2d4018ee5544f46505e1ae	eb0f16c	2026-05-01T20:27:11+02:00	Pands	Expand Windows build environment docs
+7	172f611ab8b112b18ef5a71dbbf598c086072d41	172f611	2026-05-01T20:27:58+02:00	Pands	Add runtime bring-up runbook
+8	f37c5f986fc9f60420e63206150eb6732273f128	f37c5f9	2026-05-01T20:31:04+02:00	Pands	Holistic review: add CI and tighten build/runtime readiness (#1)
+9	ea413c5369bae6c9a657a876de84754cd63668a1	ea413c5	2026-05-01T20:33:36+02:00	Pands	Reject duplicate stereo frame pairs
+10	291ad49382c0842c1adaa576857cd241537e4fdd	291ad49	2026-05-01T20:35:47+02:00	Pands	Reject duplicate stereo frame pairs
+11	e9cd7bf576faa80905a67e2a919e566cf53a4c85	e9cd7bf	2026-05-01T20:37:00+02:00	Pands	Add frame pairer duplicate rejection tests
+12	864c709ea2ac047d61c16feb4e4e2fc7ca6ddb66	864c709	2026-05-01T20:58:28+02:00	Pands	Wire frame pairer tests into CMake
+13	8737bf3e750b0fc9fa22cd28af1245bc3b310671	8737bf3	2026-05-01T21:00:07+02:00	Pands	Fail camera startup on health timeout
+14	a25588670fb2ce3ed6dcf32b560fa0c942e99a70	a255886	2026-05-01T21:04:59+02:00	Pands	Harden runtime frame pairing and camera startup (#2)
+15	18df8a7b12e492368289242054a64b86936d0916	18df8a7	2026-05-01T21:17:43+02:00	Pands	Make JSON HMD provider strict
+16	74005d692ebc23511d53c514f6e001338f2cab00	74005d6	2026-05-01T21:18:30+02:00	Pands	Add JSON HMD provider tests
+17	59697c91405736cfb8ee298ddf8cfdd4043e5799	59697c9	2026-05-01T21:22:58+02:00	Pands	Wire JSON HMD provider tests into CMake
+18	bf11186313a6a0fb65747edd59fd5ffe333b86c5	bf11186	2026-05-01T21:25:14+02:00	Pands	Expose duplicate frame-pair telemetry in web UI
+19	061ff56a00aae3d5c9ddc3a69d7e5afd7755f614	061ff56	2026-05-01T21:26:05+02:00	Pands	Record duplicate frame-pair telemetry in replay logs
+20	fbcb705c0f67ff7ebecd9696aed8f90dba2e1e45	fbcb705	2026-05-01T21:27:20+02:00	Pands	Remove fake static HMD config fields
+21	fb278d4c5639dcff2645e1db7a12a3626c18fed8	fb278d4	2026-05-01T21:29:30+02:00	Pands	Remove static HMD provider
+22	dc0847bf2d265985c66ba672bd4c56fdf4eb4fae	dc0847b	2026-05-01T21:32:31+02:00	Pands	Remove static HMD provider implementation
+23	c9dfa80a09e9723c6148a3c18be637e7f2a09ab9	c9dfa80	2026-05-01T21:34:41+02:00	Pands	Remove static HMD mode from config
+24	ef2a3bdbfa47866452bdc25a255e94b636b753b8	ef2a3bd	2026-05-01T21:35:18+02:00	Pands	Remove fake static HMD fields from default config
+25	4d684749445a1d87d22a670d7711578cf33bf282	4d68474	2026-05-01T21:36:47+02:00	Pands	Restyle local web dashboard as control surface
+26	a62c4e1495d33e52504d8a34936c7b1b28695154	a62c4e1	2026-05-01T21:47:55+02:00	Pands	Match SignalOnly dashboard font stack
+27	a210007cc3267043e5e95b73dde267efe9a67693	a210007	2026-05-01T22:17:44+02:00	Pands	Add release-safe test checks
+28	9ec34c9684e762ba0902b237dfe3bf7db5285b3d	9ec34c9	2026-05-01T22:23:40+02:00	Pands	Make HMD provider tests release-safe
+29	2919187747cdbd490de7d07a7e7978cee41db34c	2919187	2026-05-01T22:24:05+02:00	Pands	Make frame pairer tests release-safe
+30	772804bf84d7be3a8c47156ba4d5227041e7645d	772804b	2026-05-01T22:26:08+02:00	Pands	Make OSC and triangulation tests release-safe
+31	5f4523293ed01986492fd60037c67f1e34115545	5f45232	2026-05-01T22:41:01+02:00	Pands	Fix FrameSlot replacement counter race
+32	7355fdbaa8fb17b2c05e2f084b693f7511a3cb6a	7355fdb	2026-05-01T22:42:05+02:00	Pands	Serve dashboard font assets and fix web server running race
+33	13e1e52feb5a0798de92350203ed2019986598fa	13e1e52	2026-05-01T22:44:10+02:00	Pands	Make Windows socket initialization thread-safe
+34	a7629eccb8a782c96566c457e46c2ff3a3c616c1	a7629ec	2026-05-01T22:48:07+02:00	Pands	Make config parsing reject malformed structured values
+35	d780d2c5d2a5ab03ef81533d38504f1779cdc8f9	d780d2c	2026-05-01T22:57:02+02:00	Pands	Remove forced OpenCV highgui include and link test deps
+36	d2edb54d62430b25e23a0bfa76ff25339636662a	d2edb54	2026-05-01T23:04:27+02:00	Pands	Keep highgui build path stable and link frame pairer test deps
+37	0ba8eb996ca3435f0603462d28881eafe4552944	0ba8eb9	2026-05-01T23:12:40+02:00	Pands	Add explicit CMake preset configurations
+38	532b027f3890d5632b9ac725e86b6189eb89cc00	532b027	2026-05-01T23:14:00+02:00	Pands	Harden Result against OK error status
+39	143901f2b1da31f396bfa63e30b8097721afa24c	143901f	2026-05-01T23:18:04+02:00	Pands	Validate triangulation inputs, projection, and chirality
+40	050ab7a979c7940871952a6e3a3e5bb4a158c75b	050ab7a	2026-05-01T23:20:29+02:00	Pands	Cover triangulation rejection paths in tests
+41	043d564f7d6879c154b96e56406e637d0cc80e2a	043d564	2026-05-01T23:27:25+02:00	Pands	Add predictive occlusion fallback for lower-body tracking
+42	a07edb85e0144771fd12c11604faea3c618f668c	a07edb8	2026-05-01T23:30:42+02:00	Pands	Add foot-specific temporal correction gains
+43	6e253b17894792904b5c75cbaa09ac3c2ad73a2a	6e253b1	2026-05-01T23:31:30+02:00	Pands	Smooth foot and joint correction through temporal filter
+44	0a7b6bfc48df8769909ee9f1d1da34bebe1d798f	0a7b6bf	2026-05-01T23:33:39+02:00	Pands	Use ankle pitch in lower-body foot keypoint model
+45	463c92567b626cc6bada8d22bc5d2a1ab3d2e782	463c925	2026-05-01T23:37:30+02:00	Pands	Add configurable motion consistency settings
+46	5facffd6e5c7b139b5351f9b38a354699f2e9da2	5facffd	2026-05-01T23:56:26+02:00	Pands	Add motion consistency filter interface
+47	8022fc8aa9f02d5d38174dc2d6aa2c8d88cba35f	8022fc8	2026-05-02T00:10:25+02:00	Pands	Implement motion direction consistency filter
+48	60d879262b922fcc9ab54f5e90378c4d0554687c	60d8792	2026-05-02T00:12:55+02:00	Pands	Add tracking config and motion filter state to pipeline
+49	c182acdc9d2703019c6c2af6c64a80ff33123894	c182acd	2026-05-02T00:14:47+02:00	Pands	Apply motion consistency filter in tracking pipeline
+50	f2ceac33bf7fb619e86c3afb5020134ec591aad1	f2ceac3	2026-05-02T00:16:02+02:00	Pands	Load and validate motion consistency config
+51	fa051e44d8302da5beaf164b0b13038b3d87c938	fa051e4	2026-05-02T00:18:26+02:00	Pands	Expose motion consistency defaults in config
+52	0947d41d2dcc0b1b6422c17d480d0bac40f2a229	0947d41	2026-05-02T00:18:56+02:00	Pands	Add motion consistency filter behavior tests
+53	a18b1aa9d4d395a358bb1a18cdd16d908b1059c0	a18b1aa	2026-05-02T00:19:25+02:00	Pands	Build and test motion consistency filter
+54	958c23fd3b5dabb54cd5377252f4d120e6047859	958c23f	2026-05-02T00:22:07+02:00	Pands	Add compatibility tracking pipeline API surface
+55	e64062ef93362be37ad76f143c8fff75463f4ab8	e64062e	2026-05-02T00:22:51+02:00	Pands	Implement compatibility pipeline entrypoints and telemetry
+56	2c686c111b62e81c77b7f97ceccf63342a4c4f62	2c686c1	2026-05-02T00:23:26+02:00	Pands	Track accumulated low-motion drift in filter state
+57	605db37d261f6e9ad4740d12110aef3b41893802	605db37	2026-05-02T00:24:06+02:00	Pands	Prevent low-motion drift from being erased forever
+58	cda0b5efb69ee12e4d2460f4394c1362ba8a845f	cda0b5e	2026-05-02T00:24:44+02:00	Pands	Test accumulated low-motion drift handling
+59	98dcfc5089aa98ee083d7a2651ce6fe1bd9e8c75	98dcfc5	2026-05-02T00:26:43+02:00	Pands	Include cstddef for motion target enum type
+60	de1389bdf320d053288299baeb7bd9b507a877f1	de1389b	2026-05-02T00:27:20+02:00	Pands	Initialize planted targets from support anchors
+61	40f0c58a7c1c462278b062fd444973dafb935250	40f0c58	2026-05-02T00:28:56+02:00	Pands	Add Codex notes for main cpp and tracking filter follow-up
+62	d74535d9961213c8376b686a126cf15d55162503	d74535d	2026-05-02T00:30:42+02:00	Pands	Add string names for root support telemetry
+63	39ec7c7628d2be85c152a36391a9e337f5e8ffb8	39ec7c7	2026-05-02T00:31:15+02:00	Pands	Log motion filter and solver telemetry in replay output
+64	fe5812043c04a8b96c4ac73e884a18686f905e0f	fe58120	2026-05-02T00:31:39+02:00	Pands	Restore runtime-compatible config aliases
+65	593dd80160d723f507a24d13c3ce71767b92564a	593dd80	2026-05-02T00:32:34+02:00	Pands	Populate runtime-compatible config aliases
+66	4f469be9e40b8a32a5151f6f4c0e50e61aefb8e6	4f469be	2026-05-02T00:33:07+02:00	Pands	Keep default config aligned with runtime aliases
+67	47b331b9dc891b43a1f1b6256f81ba7971550296	47b331b	2026-05-02T00:33:47+02:00	Pands	Declare replay append compatibility method
+68	b1d3b76f2ceb07ca379e69a9024d66e1f9ecfc01	b1d3b76	2026-05-02T00:34:26+02:00	Pands	Implement replay append compatibility method
+69	391bafee7e75dfae629dfad2d0fe9ee8d5f2eb41	391bafe	2026-05-02T00:34:53+02:00	Pands	Add HMD ReadLatest compatibility wrapper
+70	efe75cd4be18932a40c5c9c8c926296d6b2a091e	efe75cd	2026-05-02T00:35:24+02:00	Pands	Add debug snapshot compatibility fields
+71	5666fcbffbc52b5054b87c88a04423c87cc67b42	5666fcb	2026-05-02T00:38:08+02:00	Pands	Prefer live debug aliases when writing replay logs
+72	506df60e37abda85d274a4cb264428a0dced723b	506df60	2026-05-02T00:38:59+02:00	Pands	Keep replay log stream open
+73	26fcd52d280488000602cae9da176b8c50e5a327	26fcd52	2026-05-02T00:58:40+02:00	Pands	Avoid reopening replay log for every frame
+74	edaf810d2dbce9b139d12dfe52bbd6762eee8894	edaf810	2026-05-02T01:00:09+02:00	Pands	Precompute undistorted keypoints in body solver
+75	b3d8faf9d4dd92d8511fba7a5e2cc41f8c41aeea	b3d8faf	2026-05-02T01:02:24+02:00	Pands	Add OSC address and packet caches
+76	e875ac6a77b51e9bd8f161924d3a82b8391cdc86	e875ac6	2026-05-02T01:03:01+02:00	Pands	Cache OSC tracker addresses and packet buffer
+77	9bf49f486728564fb4b0c897c3ed32365286eb65	9bf49f4	2026-05-02T01:04:51+02:00	Pands	Restrict body solver loops to used lower-body keypoints
+78	6804edb09e484a16676a4dc50fec232357295457	6804edb	2026-05-02T12:58:36+02:00	Pands	Update Codex notes after optimization and compatibility passes
+79	9f888fd6fd8deeddbe3460f69bc3165c4ee79135	9f888fd	2026-05-02T13:21:02+02:00	Pands	Restore runtime state publish compatibility
+80	641106eada7c6e1f8f2fb5884d47757ebf47dac9	641106e	2026-05-02T13:24:21+02:00	Pands	Use live debug aliases in web status output
+81	61e25b8cf9f370a87148f132aeac8ed3257c8750	61e25b8	2026-05-02T13:27:40+02:00	Pands	Harden replay writer alias fallback and reopen behavior
+82	5d5a637e417bce397f8ae4ccd65e8f1163292e79	5d5a637	2026-05-02T20:40:00+02:00	Pands	Add desktop WebView app UI and auto sync
+83	f34ef8adca7bae8b2a444ccd681562c6f27089c9	f34ef8a	2026-05-02T20:40:30+02:00	Pands	Auto-sync desktop changes 2026-05-02 20:40:30
+84	c59c2d97fcba91c030c72a52085c710944750bc8	c59c2d9	2026-05-02T23:40:00+02:00	Pands	Reject one-sided stale frame reuse in pairer
+85	40fcaed68a27e096ae1e1aa8b5c8aedd8d507d14	40fcaed	2026-05-02T23:45:50+02:00	Pands	Reject one-sided stale frame reuse in pairer
+86	4ef90c15d735696ea851c8d6cda2f364840d6eff	4ef90c1	2026-05-02T23:46:10+02:00	Pands	Test one-sided stale frame rejection
+87	817aec99126c845b380139859004c6851d6f9ea1	817aec9	2026-05-02T23:47:45+02:00	Pands	Add floor plane geometry helpers
+88	c7ec44b8f32bf090f0d35640460d3bc9488994ef	c7ec44b	2026-05-02T23:53:50+02:00	Pands	Test floor plane helpers
+89	dd66584a3ae60ebd0e38eb15c5c1ec3fc653e076	dd66584	2026-05-02T23:54:23+02:00	Pands	Add floor plane helper test target
+90	f5bbb04e5e32a9a54965c9c7ecf0bbae6c5b6deb	f5bbb04	2026-05-02T23:58:39+02:00	Pands	Use calibrated floor plane for foot support
+91	cb770ba943590bcb7ebc904757b254f69ac8299e	cb770ba	2026-05-02T23:59:38+02:00	Pands	Use calibrated floor plane for foot support
+92	c10189d2055675784ceed96cce796043cb91f60c	c10189d	2026-05-03T00:01:04+02:00	Pands	Pass calibrated floor plane into support classification
+93	710fd733f9e57a8cc062a16d05555ab775237080	710fd73	2026-05-03T00:02:18+02:00	Pands	Project floor-supported feet onto calibrated plane
+94	82ab0a4215727cecf337715d006a823f7ed1c421	82ab0a4	2026-05-03T00:03:01+02:00	Pands	Test floor-plane foot support classification
+95	9244b3f34ed49512a910c79c76ee7be0ba2e0f26	9244b3f	2026-05-03T00:05:16+02:00	Pands	Add foot support test target
+96	8945e063d4fb8da271a98cb471a9148ca02c79db	8945e06	2026-05-03T00:09:15+02:00	Pands	Weight seed ingestion by calibrated bone lengths
+97	30f98c1caa851166d0a2fcb2233c0eb67fb48502	30f98c1	2026-05-03T00:10:05+02:00	Pands	Test calibrated bone length seed weighting
+98	84fdf46240c0017e172c71fed3d57e25dbbf2667	84fdf46	2026-05-03T00:11:51+02:00	Pands	Add body model seed weighting test target
+99	d349b35a9e7bdcb26c13d6d1625deb6050bb6b73	d349b35	2026-05-03T00:12:44+02:00	Pands	Add tracker EKF filter
+100	61f2950385b60b4aaaee48514d69ce294c909b3f	61f2950	2026-05-03T00:13:53+02:00	Pands	Add tracker EKF filter
+101	532080281e859e2919de5a58a77b33f9bdf52f4e	5320802	2026-05-03T00:15:40+02:00	Pands	Wire tracker EKF into pipeline state
+102	f999b74776812fa4d7505b497f26e5b2f8b0e44e	f999b74	2026-05-03T00:16:42+02:00	Pands	Apply tracker EKF in runtime pipeline
+103	3f51badfbad625e09a9a5458bac5f0c5d48ab4a7	3f51bad	2026-05-03T00:18:11+02:00	Pands	Add tracker EKF config
+104	f1bbef818f789fbadcecf11dd694a595161ab6c5	f1bbef8	2026-05-03T00:19:30+02:00	Pands	Use shared tracker EKF config type
+105	39de46158f95ab399b28281be090b04036003d07	39de461	2026-05-03T00:20:32+02:00	Pands	Test tracker EKF smoothing
+106	624167c8155afa3fef4a83c80e016260d2bbb3be	624167c	2026-05-03T00:21:07+02:00	Pands	Build tracker EKF module and tests
+107	e46496beb23c34c9588bc4e20412fd35c4285bb7	e46496b	2026-05-03T00:22:14+02:00	Pands	Expose tracker EKF defaults in config
+108	30ea090d1bb923f7f56bcf82f5cf212ffc77c5b6	30ea090	2026-05-03T00:24:04+02:00	Pands	Use role-specific tracker confidence
+109	86a665a74c7832ed9cd5bd1a63fe3d0d14aac636	86a665a	2026-05-03T00:25:40+02:00	Pands	Test role-specific tracker confidence
+110	172f76bc1f94d361628410894cd5e1f2cb18ebc7	172f76b	2026-05-03T03:53:15+02:00	Pands	Add final FBT latest patch state
+111	4dc5e0bbf2a453f273d912e6022c73188c02948a	4dc5e0b	2026-05-03T04:36:56+02:00	Pands	Fix free foot motion prediction for consistency filter
+112	c5dc1530587ad4e070045d5152b2dd80673761d1	c5dc153	2026-05-07T03:17:54+02:00	Pands	Update install-auto-sync-task.ps1
+113	18c1c2b8dab82f78abf91c1afc2fa1050256a099	18c1c2b	2026-05-30T23:33:36Z	Pands	Fix tracker-space alignment and VRChat OSC output
+114	5b3eb3094303e7afd61bd7825237036eb618fcff	5b3eb30	2026-05-30T23:35:29Z	Pands	Revert "Fix tracker-space alignment and VRChat OSC output"
+115	cf23e1519eb9c087c286d43a90f5359701764846	cf23e15	2026-05-30T23:39:03Z	Pands	Fix tracker-space alignment and VRChat OSC output
+116	8efce53d3dea2d3d45d914a1c832704cd0c70c10	8efce53	2026-05-30T23:41:22Z	Pands	Revert "Fix tracker-space alignment and VRChat OSC output"
+117	b69a255d9834e1d5eeaecf65579247dcadcdfab8	b69a255	2026-05-30T23:52:46Z	Pands	Replace repo with finished BodyTracker workspace
+118	2cf20346627830b84f2aa2d3a43eded7e44a1479	2cf2034	2026-05-31T01:13:45Z	Pands	Replace repo with latest fixed BodyTracker
+119	2daf50f978a0db30d62b88dc56f803b7f4ac2a8a	2daf50f	2026-05-31T01:16:30Z	Pands	Remove uploaded BodyTracker archive
+120	452a4e7b28f9fec0d60121c9d406ca4de4361fe7	452a4e7	2026-05-31T02:55:18Z	Pands	Replace repo with latest fixed BodyTracker
+121	ffde3f70f1b9b2310b98518c161ed9574ac37f03	ffde3f7	2026-06-02T10:16:52Z	Pands	Replace bt source and project files from newest archive
+122	38af9781343df45f447ddcfe8525d36e8c2d989e	38af978	2026-06-02T10:59:59Z	Pands	Add .gitignore to exclude build/vendor artifacts from archives
+123	5c1134b5e441eb05683f699bbd73e9a8ead67aac	5c1134b	2026-06-08T14:33:55Z	Pands	Replace repository contents with bt.zip
