@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 
 #if defined(BODYTRACKER_HAS_OPENVR)
 #include <openvr.h>
@@ -20,6 +21,16 @@ namespace bt {
 namespace {
 
 #if defined(BODYTRACKER_HAS_OPENVR)
+std::mutex& OpenVrProcessMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+vr::IVRSystem*& SharedOpenVrSystem() {
+    static vr::IVRSystem* system = nullptr;
+    return system;
+}
+
 double NowSeconds() {
     using clock = std::chrono::steady_clock;
     return std::chrono::duration<double>(clock::now().time_since_epoch()).count();
@@ -146,14 +157,10 @@ SteamVrPoseProvider::SteamVrPoseProvider() = default;
 
 SteamVrPoseProvider::~SteamVrPoseProvider() {
 #if defined(BODYTRACKER_HAS_OPENVR)
-    if (vr_system_) {
-#if defined(_MSC_VER)
-        SafeVrShutdown();
-#else
-        vr::VR_Shutdown();
-#endif
-        vr_system_ = nullptr;
-    }
+    // OpenVR is process-global. The desktop runtime and the menu calibration
+    // wizard both poll it, so individual provider destruction must not call
+    // VR_Shutdown and invalidate the other user's IVRSystem pointer.
+    vr_system_ = nullptr;
 #endif
 }
 
@@ -161,13 +168,17 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
 #if !defined(BODYTRACKER_HAS_OPENVR)
     return MakeUnavailableSnapshot("OpenVR support was not built");
 #else
+    std::scoped_lock openvr_lock(OpenVrProcessMutex());
     SteamVrPoseSnapshot snapshot;
+    auto& shared_system = SharedOpenVrSystem();
+    if (shared_system) {
+        vr_system_ = shared_system;
+    }
     if (!vr_system_) {
         const auto now_clock = std::chrono::steady_clock::now();
         if (!init_attempted_ || now_clock >= next_init_attempt_) {
             init_attempted_ = true;
             vr::EVRInitError error = vr::VRInitError_None;
-            // VR_Init can throw on broken/mismatched runtimes. Catch everything.
             try {
 #if defined(_MSC_VER)
                 unsigned long seh_code = 0;
@@ -188,7 +199,10 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
                 vr_system_  = nullptr;
                 error        = vr::VRInitError_Init_VRClientDLLNotFound;
             }
-            if (error != vr::VRInitError_None || !vr_system_) {
+            if (error == vr::VRInitError_None && vr_system_) {
+                shared_system = static_cast<vr::IVRSystem*>(vr_system_);
+                last_error_.clear();
+            } else {
                 if (last_error_.empty()) {
                     try {
                         last_error_ = vr::VR_GetVRInitErrorAsEnglishDescription(error);
@@ -197,6 +211,7 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
                     }
                 }
                 vr_system_         = nullptr;
+                shared_system      = nullptr;
                 next_init_attempt_ = now_clock + std::chrono::seconds(2);
             }
         }
@@ -216,7 +231,7 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
 #if defined(_MSC_VER)
         unsigned long seh_code = 0;
         if (!SafeGetDeviceToAbsoluteTrackingPose(system, poses, vr::k_unMaxTrackedDeviceCount, seh_code)) {
-            SafeVrShutdown();
+            SharedOpenVrSystem() = nullptr;
             vr_system_         = nullptr;
             last_error_        = "OpenVR pose query crashed (SEH 0x" +
                 std::to_string(static_cast<unsigned long long>(seh_code)) + "); runtime reset";
@@ -232,11 +247,7 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
             vr::TrackingUniverseStanding, 0.0f, poses, vr::k_unMaxTrackedDeviceCount);
 #endif
     } catch (...) {
-#if defined(_MSC_VER)
-        SafeVrShutdown();
-#else
-        try { vr::VR_Shutdown(); } catch (...) {}
-#endif
+        SharedOpenVrSystem() = nullptr;
         vr_system_         = nullptr;
         last_error_        = "OpenVR pose query threw; runtime reset";
         next_init_attempt_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -269,7 +280,7 @@ SteamVrPoseSnapshot SteamVrPoseProvider::Poll() {
 #if defined(_MSC_VER)
         unsigned long seh_code = 0;
         if (!SafeDeviceState(system, i, connected, device_class, role, seh_code)) {
-            SafeVrShutdown();
+            SharedOpenVrSystem() = nullptr;
             vr_system_         = nullptr;
             last_error_        = "OpenVR device query crashed (SEH 0x" +
                 std::to_string(static_cast<unsigned long long>(seh_code)) + "); runtime reset";
