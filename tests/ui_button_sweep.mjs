@@ -277,7 +277,7 @@ async function auditAllButtons(page, label, options = {}) {
     actionId: button.dataset.actionId || "",
     busy: button.getAttribute("aria-busy") === "true"
   })));
-  assert.equal(buttons.length, 63, `${label}: expected to audit all 63 buttons`);
+  assert.equal(buttons.length, 65, `${label}: expected to audit all 65 buttons`);
   for (const button of buttons) {
     assert(button.state, `${label}: ${button.id || button.text} missing data-state`);
     if (button.disabled && button.state === "disabled") {

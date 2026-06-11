@@ -157,6 +157,16 @@
           <div class="floor-status" id="bodyCalReadout">body calibration: disabled</div>
         </div>
 
+
+
+        <div class="settings-title">Room depth map calibration</div>
+        <div class="settings-grid">
+          <button class="switch" id="roomDepthMapToggle" type="button" aria-pressed="true"><span>Room map collection</span><i><b>ON</b><b>OFF</b></i></button>
+          <button class="switch" id="roomDepthMapCollectOnlyToggle" type="button" aria-pressed="true"><span>Collect only</span><i><b>ON</b><b>OFF</b></i></button>
+          <label class="field"><span>Accepted frames to activate</span><input id="roomDepthMapFrames" type="number" min="1" max="60000" step="1"></label>
+          <div class="floor-status" id="roomDepthMapStatus">room map: warming up</div>
+        </div>
+
         <div class="settings-title">Monocular profile</div>
         <div class="settings-grid">
           <label class="field"><span>Image width</span><input id="monocularImageWidth" type="number" min="1"></label>

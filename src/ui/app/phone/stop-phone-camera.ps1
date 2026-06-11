@@ -5,7 +5,7 @@ $ServerScript = Join-Path $Root "phone-camera-server.mjs"
 $resolved = (Resolve-Path -LiteralPath $ServerScript).Path
 $needle = [System.Management.Automation.WildcardPattern]::Escape($resolved)
 Get-CimInstance Win32_Process |
-    Where-Object { $_.Name -match "node(\.exe)?$" -and $_.CommandLine -like "*$needle*" } |
+    Where-Object { $_.Name -match "node(\.exe)?$" -and $_.CommandLine -and ($_.CommandLine -like "*$needle*" -or $_.CommandLine -like "*phone-camera-server.mjs*") } |
     ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force
     }
@@ -35,3 +35,12 @@ Set-Content -LiteralPath $StatePath -Encoding utf8 -Value ([ordered]@{
     apk = $ApkAvailable
     updated = (Get-Date).ToString("o")
 } | ConvertTo-Json -Compress)
+
+try {
+    $adb = (Get-Command adb -ErrorAction Stop).Source
+    $devices = @((& $adb devices -l 2>$null) | Where-Object { $_ -match 'device' -and $_ -notmatch '^List of devices' } | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
+    foreach ($device in $devices) {
+        & $adb -s $device reverse --remove "tcp:$targetPort" | Out-Null
+    }
+} catch {
+}

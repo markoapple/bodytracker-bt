@@ -26,7 +26,8 @@ const ids = [
   "telemetry", "solverMetrics", "trackerRoleDetails", "inferenceDevice", "applyInferenceDevice", "modelPath", "calibrationPath", "logFile",
   "recordingDir", "replayLogPath", "staleTimeout", "latestSkew", "maxSkew", "minSeeds",
   "maxReproj", "bodyCalToggle", "bodyCalAutoPersistToggle", "bodyCalRequiredSeconds",
-  "bodyCalMinConfidence", "bodyCalMaxCv", "bodyCalReadout", "monocularImageWidth", "monocularImageHeight", "monocularFov",
+  "bodyCalMinConfidence", "bodyCalMaxCv", "bodyCalReadout", "roomDepthMapToggle", "roomDepthMapCollectOnlyToggle",
+  "roomDepthMapFrames", "roomDepthMapStatus", "monocularImageWidth", "monocularImageHeight", "monocularFov",
   "monocularUserHeight", "monocularCameraHeight", "monocularDefaultDepth",
   "monocularDepthConfidence", "monocularMinKeypointConfidence", "monocularMinSeeds",
   "floorAssistToggle", "floorCameraSlot", "floorSpacingM", "floorSpacingPx", "floorReferenceY",
@@ -2554,6 +2555,9 @@ function readPayload() {
     body_calibration_required_seconds: Number(el.bodyCalRequiredSeconds?.value),
     body_calibration_min_overall_confidence: Number(el.bodyCalMinConfidence?.value),
     body_calibration_max_segment_cv: Number(el.bodyCalMaxCv?.value),
+    room_depth_map_enabled: checked("roomDepthMapToggle"),
+    room_depth_map_collect_only: checked("roomDepthMapCollectOnlyToggle"),
+    room_depth_map_min_accepted_frames_before_active: Number(el.roomDepthMapFrames?.value),
     monocular_image_width: Number(el.monocularImageWidth?.value),
     monocular_image_height: Number(el.monocularImageHeight?.value),
     monocular_horizontal_fov_deg: Number(el.monocularFov?.value),
@@ -2739,6 +2743,22 @@ function render(state) {
     setValue("bodyCalRequiredSeconds", bodyCal.required_seconds ?? 2.5);
     setValue("bodyCalMinConfidence", bodyCal.min_overall_confidence ?? 0.55);
     setValue("bodyCalMaxCv", bodyCal.max_segment_cv ?? 0.12);
+    const roomMapConfig = current.config?.tracking?.room_depth_map || {};
+    setPressed("roomDepthMapToggle", roomMapConfig.enabled !== false);
+    setPressed("roomDepthMapCollectOnlyToggle", roomMapConfig.collect_only !== false);
+    setValue("roomDepthMapFrames", roomMapConfig.min_accepted_frames_before_active ?? 1000);
+    const roomMap = current.debug?.solver?.room_depth_map || current.debug?.room_depth_map || {};
+    const roomState = roomMap.state || (roomMapConfig.enabled === false ? "disabled" : "warming_up");
+    const accepted = Number(roomMap.accepted_frames ?? 0);
+    const rejected = Number(roomMap.rejected_frames ?? 0);
+    const coverage = Number(roomMap.coverage ?? 0);
+    const targetFrames = Number(roomMapConfig.min_accepted_frames_before_active ?? 1000);
+    const progressText = Number.isFinite(accepted) && Number.isFinite(targetFrames)
+      ? `${accepted}/${targetFrames} accepted`
+      : "-- accepted";
+    if (el.roomDepthMapStatus) {
+      el.roomDepthMapStatus.innerHTML = `room map: <b class="${roomState === "active" || roomState === "collect_only_active" ? "good" : (roomState === "disabled" ? "warn" : "")}">${esc(roomState)}</b> · ${esc(progressText)} · rejected ${esc(rejected)} · coverage ${fmt(coverage * 100, 1)}%${roomMap.last_rejection_reason ? ` · last ${esc(roomMap.last_rejection_reason)}` : ""}`;
+    }
     const mono = current.config?.tracking?.monocular || {};
     if (current.calibration?.floor_geometry) {
       hydrateFloorGeometryFromStatus();
@@ -3186,7 +3206,7 @@ function bindEvents() {
   el.saveConfig?.addEventListener("click", () => withButtonFeedback(el.saveConfig, "saveConfig", () => saveVisibleConfig("Manual plank refresh before save")));
   el.saveAdvanced?.addEventListener("click", () => withButtonFeedback(el.saveAdvanced, "saveConfig", () => saveVisibleConfig("Manual plank refresh before advanced save")));
 
-  for (const id of ["steamVrBridgeToggle", "steamVrBridgeChestToggle", "steamVrBridgeElbowsToggle", "steamVrBridgeKneesToggle", "oscToggle", "oscRotToggle", "legacySolverToggle", "replayToggle", "motionToggle", "stereoFallbackToggle", "bodyCalToggle", "bodyCalAutoPersistToggle", "floorAssistToggle", "trackerSpaceValidToggle", "cropToggle"]) {
+  for (const id of ["steamVrBridgeToggle", "steamVrBridgeChestToggle", "steamVrBridgeElbowsToggle", "steamVrBridgeKneesToggle", "oscToggle", "oscRotToggle", "legacySolverToggle", "replayToggle", "motionToggle", "stereoFallbackToggle", "bodyCalToggle", "bodyCalAutoPersistToggle", "roomDepthMapToggle", "roomDepthMapCollectOnlyToggle", "floorAssistToggle", "trackerSpaceValidToggle", "cropToggle"]) {
     bindToggle(id);
   }
   el.cropToggle?.addEventListener("click", () => {

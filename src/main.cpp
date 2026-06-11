@@ -982,6 +982,17 @@ nlohmann::json BodyCalibrationTelemetryToJson(const bt::BodyCalibrationTelemetry
     };
 }
 
+nlohmann::json RoomDepthMapTelemetryToJson(const bt::RoomDepthMapTelemetry& room) {
+    return {
+        {"state", room.state},
+        {"coverage", room.coverage},
+        {"accepted_frames", room.accepted_frames},
+        {"rejected_frames", room.rejected_frames},
+        {"mean_variance_m2", room.mean_variance_m2},
+        {"last_rejection_reason", room.last_rejection_reason}
+    };
+}
+
 nlohmann::json FloorAssistTelemetryToJson(const bt::TrackingSolverTelemetry& solver) {
     const auto& stereo = solver.preliminary_stereo;
     const bool depth_assist =
@@ -6268,6 +6279,25 @@ private:
         j["tracking"]["stereo_monocular_fallback_enabled"] = payload.value("stereo_monocular_fallback_enabled", cfg_snapshot.tracking.stereo_monocular_fallback_enabled);
         j["tracking"]["use_legacy_solver"] = payload.value("use_legacy_solver", cfg_snapshot.tracking.use_legacy_solver);
         j["tracking"]["enable_replay_recording"] = payload.value("enable_replay_recording", cfg_snapshot.tracking.enable_replay_recording);
+        if (!j["tracking"].contains("room_depth_map") || !j["tracking"]["room_depth_map"].is_object()) {
+            j["tracking"]["room_depth_map"] = nlohmann::json::object();
+        }
+        auto& room_depth_map = j["tracking"]["room_depth_map"];
+        const auto& current_room_map = cfg_snapshot.tracking.room_depth_map;
+        room_depth_map["enabled"] = payload.value("room_depth_map_enabled", current_room_map.enabled);
+        room_depth_map["collect_only"] = payload.value("room_depth_map_collect_only", current_room_map.collect_only);
+        room_depth_map["min_accepted_frames_before_active"] = payload.value(
+            "room_depth_map_min_accepted_frames_before_active",
+            current_room_map.min_accepted_frames_before_active);
+        room_depth_map["resolution_width"] = payload.value("room_depth_map_resolution_width", current_room_map.resolution_width);
+        room_depth_map["resolution_height"] = payload.value("room_depth_map_resolution_height", current_room_map.resolution_height);
+        room_depth_map["min_samples_per_cell"] = payload.value("room_depth_map_min_samples_per_cell", current_room_map.min_samples_per_cell);
+        room_depth_map["max_cell_variance_m2"] = payload.value("room_depth_map_max_cell_variance_m2", current_room_map.max_cell_variance_m2);
+        room_depth_map["body_mask_dilation_px"] = payload.value("room_depth_map_body_mask_dilation_px", current_room_map.body_mask_dilation_px);
+        room_depth_map["update_only_when_anchor_quality_good"] = payload.value("room_depth_map_update_only_when_anchor_quality_good", current_room_map.update_only_when_anchor_quality_good);
+        room_depth_map["save_path"] = payload.value("room_depth_map_save_path", current_room_map.save_path.string());
+        room_depth_map["load_existing"] = payload.value("room_depth_map_load_existing", current_room_map.load_existing);
+        room_depth_map["save_interval_seconds"] = payload.value("room_depth_map_save_interval_seconds", current_room_map.save_interval_seconds);
         if (!j["tracking"].contains("body_calibration") || !j["tracking"]["body_calibration"].is_object()) {
             j["tracking"]["body_calibration"] = nlohmann::json::object();
         }
@@ -7362,7 +7392,8 @@ private:
             {"support_constraints", SupportSolveConstraintsUiToJson(solver.final_constraints)},
             {"monocular_scale_source", bt::ToString(solver.preliminary_stereo.monocular_scale_source)},
             {"monocular_floor_assist_depth_m", solver.preliminary_stereo.monocular_floor_assist_depth_m},
-            {"monocular_floor_assist_confidence", solver.preliminary_stereo.monocular_floor_assist_confidence}
+            {"monocular_floor_assist_confidence", solver.preliminary_stereo.monocular_floor_assist_confidence},
+            {"room_depth_map", RoomDepthMapTelemetryToJson(solver.room_depth_map)}
         };
     }
 

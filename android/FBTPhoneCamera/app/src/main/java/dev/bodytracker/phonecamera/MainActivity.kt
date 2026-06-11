@@ -1,6 +1,7 @@
 package dev.bodytracker.phonecamera
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.Rect
@@ -60,7 +61,7 @@ class MainActivity : ComponentActivity() {
     private val encodedFrames = AtomicLong(0)
     private val encoderErrors = AtomicLong(0)
     private var cameraMode = CameraMode.Back
-    private var autoStartAttempted = false
+    private var pendingAutoStart = false
     @Volatile private var jpegQuality = 72
     private val streaming = AtomicBoolean(false)
 
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        applyConnectionIntent(intent)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             bindCamera()
         } else {
@@ -156,6 +158,47 @@ class MainActivity : ComponentActivity() {
             addView(previewView)
             addView(controls)
         })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyConnectionIntent(intent)
+    }
+
+    private fun applyConnectionIntent(intent: Intent?) {
+        if (intent == null) return
+        val host = intent.getStringExtra("bt_host")?.trim().orEmpty()
+        val port = intent.getIntExtra("bt_port", -1)
+        val quality = intent.getIntExtra("bt_quality", -1)
+        val autostart = intent.getBooleanExtra("bt_autostart", false)
+        if (host.isNotBlank()) {
+            pcIpEdit.setText(host)
+        }
+        if (port in 1..65535) {
+            portEdit.setText(port.toString())
+        }
+        if (quality in 35..95) {
+            qualityEdit.setText(quality.toString())
+        }
+        if (host.isNotBlank() || port in 1..65535 || quality in 35..95) {
+            saveSettings(
+                pcIpEdit.text.toString().trim(),
+                portEdit.text.toString().trim().toIntOrNull() ?: 39555,
+                qualityEdit.text.toString().trim().toIntOrNull()?.coerceIn(35, 95) ?: 72)
+        }
+        if (autostart) {
+            pendingAutoStart = true
+            streamButton.postDelayed({ maybeAutoStartStream() }, 750)
+        }
+    }
+
+    private fun maybeAutoStartStream() {
+        if (!pendingAutoStart || streaming.get()) return
+        val host = pcIpEdit.text.toString().trim()
+        if (host.isBlank()) return
+        pendingAutoStart = false
+        toggleStream()
     }
 
     private fun toggleStream() {
@@ -277,10 +320,7 @@ class MainActivity : ComponentActivity() {
                 val camera = provider.bindToLifecycle(this, selector, preview, analysis)
                 applyWideZoomIfAvailable(camera, cameraMode)
                 statusText.text = cameraReadyText(cameraMode, selectedBackId, camera)
-                if (!autoStartAttempted) {
-                    autoStartAttempted = true
-                    toggleStream()
-                }
+                streamButton.post { maybeAutoStartStream() }
             } catch (e: Exception) {
                 statusText.text = "Camera bind failed: ${e.message}"
             }
@@ -522,7 +562,7 @@ private class TcpMjpegStreamer(
     }
 }
 
-private fun defaultPcHost(): String = "192.168.1.95"
+private fun defaultPcHost(): String = "127.0.0.1"
 
 private const val TAG = "FBTPhoneCamera"
 

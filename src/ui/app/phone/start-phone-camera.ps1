@@ -1,7 +1,8 @@
 param(
     [int]$WebPort = 39443,
     [int]$TargetPort = 39555,
-    [switch]$Open
+    [switch]$Open,
+    [switch]$Adb
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +27,8 @@ function Write-PhoneSiteState([bool]$Enabled, [string]$Status, [string]$Url, [st
         pc_ips = @($ips)
         apk = $ApkAvailable
         cert = "self-signed"
+        adb = $AdbAvailable
+        adb_devices = @($AdbDevices)
         updated = (Get-Date).ToString("o")
     } | ConvertTo-Json -Compress)
 }
@@ -155,8 +158,59 @@ function Stop-ExistingPhoneServer([string]$ScriptPath) {
     $resolved = (Resolve-Path -LiteralPath $ScriptPath).Path
     $needle = [System.Management.Automation.WildcardPattern]::Escape($resolved)
     Get-CimInstance Win32_Process |
-        Where-Object { $_.Name -match "node(\.exe)?$" -and $_.CommandLine -and $_.CommandLine -like "*$needle*" } |
+        Where-Object { $_.Name -match "node(\.exe)?$" -and $_.CommandLine -and ($_.CommandLine -like "*$needle*" -or $_.CommandLine -like "*phone-camera-server.mjs*") } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+}
+
+
+function Get-AdbPath {
+    try { return (Get-Command adb -ErrorAction Stop).Source } catch { return $null }
+}
+
+function Get-AdbDevices([string]$AdbPath) {
+    if (-not $AdbPath) { return @() }
+    try {
+        $lines = & $AdbPath devices -l 2>$null
+        return @($lines | Where-Object { $_ -match '\bdevice\b' -and $_ -notmatch '^List of devices' } | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
+    } catch {
+        return @()
+    }
+}
+
+function Set-AdbPhonePreferences([string]$AdbPath, [string]$Device, [int]$TargetPort) {
+    $tmp = Join-Path $env:TEMP "bodytracker-phone-connection.xml"
+    $xml = @"
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="pc_ip">127.0.0.1</string>
+    <string name="pc_port">$TargetPort</string>
+    <string name="jpeg_quality">72</string>
+</map>
+"@
+    [System.IO.File]::WriteAllText($tmp, $xml, [System.Text.UTF8Encoding]::new($false))
+    & $AdbPath -s $Device push $tmp /data/local/tmp/bodytracker-phone-connection.xml | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    & $AdbPath -s $Device shell chmod 644 /data/local/tmp/bodytracker-phone-connection.xml | Out-Null
+    & $AdbPath -s $Device shell "run-as dev.bodytracker.phonecamera sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/bodytracker-phone-connection.xml shared_prefs/connection.xml && chmod 600 shared_prefs/connection.xml'" | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Invoke-AdbPhoneLaunch([string]$AdbPath, [string]$Device, [string]$ApkPath, [int]$TargetPort) {
+    if (-not $AdbPath -or -not $Device) { return $false }
+    if (-not (Test-Path -LiteralPath $ApkPath)) { return $false }
+    & $AdbPath -s $Device reverse "tcp:$TargetPort" "tcp:$TargetPort" | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    & $AdbPath -s $Device install -r -d $ApkPath | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    & $AdbPath -s $Device shell am force-stop dev.bodytracker.phonecamera | Out-Null
+    [void](Set-AdbPhonePreferences $AdbPath $Device $TargetPort)
+    & $AdbPath -s $Device shell am start `
+        -n dev.bodytracker.phonecamera/.MainActivity `
+        --es bt_host 127.0.0.1 `
+        --ei bt_port $TargetPort `
+        --ei bt_quality 72 `
+        --ez bt_autostart true | Out-Null
+    return ($LASTEXITCODE -eq 0)
 }
 
 function Add-PhoneFirewallRule([string]$Name, [int]$Port) {
@@ -177,7 +231,11 @@ $ApkCandidates = @(
     (Join-Path $Root "..\..\..\android\FBTPhoneCamera\app\build\outputs\apk\debug\app-debug.apk"),
     (Join-Path $Root "..\..\..\..\android\FBTPhoneCamera\app\build\outputs\apk\debug\app-debug.apk")
 )
-$ApkAvailable = [bool]($ApkCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1)
+$ApkPath = ($ApkCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1)
+$ApkAvailable = [bool]$ApkPath
+$AdbPath = Get-AdbPath
+$AdbDevices = @(Get-AdbDevices $AdbPath)
+$AdbAvailable = [bool]($AdbPath -and $AdbDevices.Count -gt 0)
 
 try {
     $node = (Get-Command node -ErrorAction Stop).Source
@@ -201,6 +259,21 @@ if (-not (Test-PhoneCertificate $PfxPath $PfxPassphrase $ip)) {
 
 Add-PhoneFirewallRule "BodyTracker phone web bridge $WebPort" $WebPort
 Add-PhoneFirewallRule "BodyTracker phone backend $TargetPort" $TargetPort
+
+if ($Adb -or $AdbAvailable) {
+    if ($AdbAvailable -and $ApkAvailable) {
+        $adbLaunched = Invoke-AdbPhoneLaunch $AdbPath $AdbDevices[0] $ApkPath $TargetPort
+        if ($adbLaunched) {
+            Write-PhoneSiteState $true "adb app launched" "adb://$($AdbDevices[0])" @($urls) $ApkAvailable
+            exit 0
+        } else {
+            Write-PhoneSiteState $true "adb launch failed; falling back to web site" $url $urls $ApkAvailable
+        }
+    } elseif ($Adb) {
+        Write-PhoneSiteState $false "failed: ADB requested but no authorized device or APK was found" "" @() $ApkAvailable
+        throw "ADB requested but no authorized device or APK was found"
+    }
+}
 
 Stop-ExistingPhoneServer $ServerScript
 Write-PhoneSiteState $true "starting" $url $urls $ApkAvailable
