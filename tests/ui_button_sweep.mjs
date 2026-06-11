@@ -1,12 +1,49 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const uiUrl = pathToFileURL(path.join(repoRoot, "src", "ui", "app", "index.html")).href;
+const uiRoot = path.join(repoRoot, "src", "ui", "app");
+let uiUrl = "";
 const require = createRequire(import.meta.url);
+
+function contentType(file) {
+  if (file.endsWith(".html")) return "text/html; charset=utf-8";
+  if (file.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (file.endsWith(".css")) return "text/css; charset=utf-8";
+  if (file.endsWith(".json")) return "application/json; charset=utf-8";
+  return "application/octet-stream";
+}
+
+async function startUiServer() {
+  const server = http.createServer((request, response) => {
+    try {
+      const url = new URL(request.url || "/", "http://127.0.0.1");
+      const decoded = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+      const normalized = path.normalize(decoded).replace(/^([\\/])+/, "");
+      const filePath = path.resolve(uiRoot, normalized);
+      if (!filePath.startsWith(path.resolve(uiRoot)) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+        response.end("not found");
+        return;
+      }
+      response.writeHead(200, { "content-type": contentType(filePath), "cache-control": "no-store" });
+      response.end(fs.readFileSync(filePath));
+    } catch (error) {
+      response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      response.end(String(error?.stack || error));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  return { server, url: `http://127.0.0.1:${address.port}/index.html` };
+}
 const commandIds = [
   "scanCameras",
   "enablePhoneWebCamera",
@@ -363,6 +400,8 @@ async function exerciseDrawingStates(page) {
 }
 
 const { chromium } = await loadPlaywright();
+const uiServer = await startUiServer();
+uiUrl = uiServer.url;
 const browser = await chromium.launch({ executablePath: browserPath(), headless: true });
 const offlineBootPage = await browser.newPage({ viewport: { width: 1440, height: 1800 } });
 await offlineBootPage.goto(uiUrl, { waitUntil: "load" });
@@ -422,5 +461,6 @@ await page.waitForTimeout(80);
 await sendState(page);
 await exerciseDrawingStates(page);
 await browser.close();
+await new Promise((resolve) => uiServer.server.close(resolve));
 
 console.log(JSON.stringify({ ok: true, scenarios: results }, null, 2));
